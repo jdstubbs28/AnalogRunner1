@@ -1,7 +1,7 @@
 {
   "name": "Interval Clock",
   "short_name": "Interval",
-  "description": "Interval timer and GPS speedometer with voice cues",
+  "description": "Interval timer with metronome, custom intervals, and stride length tools",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

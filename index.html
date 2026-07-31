@@ -641,13 +641,8 @@
 
 <div class="app">
   <div class="eyebrow">
-    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v31</span>
+    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v43</span>
     <span id="totalLabel">00:00 TOTAL</span>
-  </div>
-
-  <div class="tabs">
-    <div class="tab active" id="tabTimer" data-view="timer">Timer</div>
-    <div class="tab" id="tabSpeed" data-view="speed">Speedometer</div>
   </div>
 
   <div class="view active" id="timerView">
@@ -764,7 +759,7 @@
 
       <div class="toggle-row" style="margin-top:6px;">
         <span>Metronome (work only)</span>
-        <div class="switch" id="metronomeToggle"></div>
+        <div class="switch on" id="metronomeToggle"></div>
       </div>
       <div class="field" style="margin-top:10px;">
         <label>Metronome BPM</label>
@@ -848,78 +843,9 @@
     <div class="hint">SPACE TO START/PAUSE · R TO RESET</div>
     <div class="wake-status" id="wakeStatus1"></div>
   </div>
-
-  <div class="view" id="speedView">
-    <div class="speed-stage">
-      <div class="speed-status" id="speedStatus">GPS idle · tap start to track</div>
-
-      <div class="speed-big" id="speedBig">0.0</div>
-      <div class="speed-unit" id="speedUnitLabel">km/h</div>
-
-      <div class="speed-stats">
-        <div class="speed-stat">
-          <div class="val" id="maxSpeedVal">0.0</div>
-          <div class="lbl">Max</div>
-        </div>
-        <div class="speed-stat">
-          <div class="val" id="avgSpeedVal">0.0</div>
-          <div class="lbl">Avg</div>
-        </div>
-        <div class="speed-stat">
-          <div class="val" id="accuracyVal">—</div>
-          <div class="lbl">Accuracy</div>
-        </div>
-      </div>
-
-      <div class="heading-row">
-        <svg class="heading-arrow" id="headingArrow" viewBox="0 0 24 24" width="20" height="20">
-          <path d="M12 2 L17 20 L12 16 L7 20 Z" fill="currentColor"></path>
-        </svg>
-        <span class="heading-text" id="headingVal">Heading —</span>
-      </div>
-
-      <div class="distance-row">
-        <span class="distance-text" id="distanceVal">0.00 km</span>
-      </div>
-
-      <div class="speed-controls">
-        <button id="speedToggleBtn">Start Tracking</button>
-      </div>
-
-      <div class="unit-switch-row">
-        <span id="mphLabel">mph</span>
-        <div class="switch on" id="unitToggle"></div>
-        <span id="kmhLabel" class="on">km/h</span>
-      </div>
-
-      <div class="toggle-row" style="margin-top:16px;">
-        <span>Voice heading cues</span>
-        <div class="switch" id="headingVoiceToggle"></div>
-      </div>
-
-      <div class="toggle-row" style="margin-top:16px;">
-        <span>Voice distance cues</span>
-        <div class="switch" id="distanceVoiceToggle"></div>
-      </div>
-      <div class="cue-points">Calls out every 500 meters covered</div>
-
-      <div class="toggle-row" style="margin-top:16px;">
-        <span>Voice speed cues</span>
-        <div class="switch" id="voiceToggle"></div>
-      </div>
-      <div class="cue-points" id="cuePointsLabel">Calls out every 1 km/h from 1–15, speeding up or slowing down</div>
-
-      <div class="field" style="margin-top:16px;">
-        <label>Voice</label>
-        <select id="voiceSelect" class="voice-select">
-          <option value="">Loading voices…</option>
-        </select>
-      </div>
-    </div>
-    <div class="hint">GPS ACCURACY DEPENDS ON SIGNAL · BEST OUTDOORS</div>
-    <div class="wake-status" id="wakeStatus2"></div>
-  </div>
 </div>
+
+<div class="dim-hint" id="dimHint">Tap anywhere to brighten</div>
 
 <script>
 (function(){
@@ -959,6 +885,16 @@
   let customModeOn = false;
   let customIntervals = []; // { duration, bpm }
   let strideVoiceOn = false;
+
+  function speak(text){
+    try{
+      if (!('speechSynthesis' in window)) return;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 1.0;
+      utter.volume = 1.0;
+      window.speechSynthesis.speak(utter);
+    }catch(e){}
+  }
 
   function announceStrideIfNeeded(step){
     const debugEl = document.getElementById('strideVoiceDebug');
@@ -1105,7 +1041,7 @@
   function cueCountdown(){ beep(700, 0.08); }
 
   // --- Metronome (custom bpm, plays only during work phase, counts actual beats) ---
-  let metronomeOn = false;
+  let metronomeOn = true;
   let metronomeIntervalId = null;
   let beatCount = 0;
   let beatCountStepIndex = -1;
@@ -1138,8 +1074,9 @@
   }
 
   function updateEstSpeed(){
-    // Live estimate assumes you're matching your steps to the set BPM
-    const bpm = getBpm();
+    // Live estimate assumes you're matching your steps to the set BPM — reads the field
+    // directly (not getBpm()) since this is for planning, not reflecting live playback
+    const bpm = Math.max(20, Math.min(300, parseInt(bpmInputEl.value) || 100));
     const stride = getStride();
     const speedKmh = (bpm * stride * 60) / 1000; // beats/min * m/beat = m/min -> km/h
     estSpeedLabelEl.textContent = 'Est. speed at this bpm: ' + speedKmh.toFixed(1) + ' km/h (' + (speedKmh * 0.621371).toFixed(1) + ' mph)';
@@ -1231,7 +1168,7 @@
 
   function syncMetronome(){
     const currentStep = schedule[stepIndex];
-    const shouldPlay = metronomeOn && (!running || (currentStep && currentStep.type === 'work'));
+    const shouldPlay = metronomeOn && running && currentStep && currentStep.type === 'work';
     if (shouldPlay) startMetronome(); else stopMetronome();
   }
 
@@ -1285,14 +1222,6 @@
     stopMetronome(); // force a fresh restart so a per-step custom bpm always takes effect
     syncMetronome();
 
-    const dbgEl2 = document.getElementById('strideVoiceDebug');
-    if (dbgEl2){
-      dbgEl2.textContent = 'DEBUG advance: voiceOn=' + strideVoiceOn +
-        ' customOn=' + customModeOn +
-        ' stepIdx=' + stepIndex +
-        ' stepType=' + step.type;
-    }
-
     if (step.type === 'done'){
       finish();
     }
@@ -1303,7 +1232,7 @@
   let dimTimer = null;
   const DIM_DELAY_MS = 8000;
   const dimHint = document.getElementById('dimHint');
-  const wakeStatusEls = [document.getElementById('wakeStatus1'), document.getElementById('wakeStatus2')];
+  const wakeStatusEls = [document.getElementById('wakeStatus1')];
 
   function setWakeStatus(text, cls){
     wakeStatusEls.forEach(el => {
@@ -1332,13 +1261,13 @@
   }
 
   function releaseWakeLockIfIdle(){
-    if (!running && !tracking && wakeLock){
+    if (!running && wakeLock){
       wakeLock.release().catch(() => {});
       wakeLock = null;
     }
   }
 
-  function isActive(){ return running || tracking; }
+  function isActive(){ return running; }
 
   function wake(){
     document.body.classList.remove('dimmed');
@@ -1423,18 +1352,6 @@
     if (currentStep && remaining === currentStep.duration * 1000){
       announceStrideIfNeeded(currentStep);
     }
-
-    // unconditional diagnostic dump — always shows on Start, regardless of any condition above
-    const dbgEl = document.getElementById('strideVoiceDebug');
-    if (dbgEl){
-      dbgEl.textContent = 'DEBUG start: voiceOn=' + strideVoiceOn +
-        ' customOn=' + customModeOn +
-        ' stepIdx=' + stepIndex +
-        ' stepType=' + (currentStep ? currentStep.type : 'none') +
-        ' remaining=' + remaining +
-        ' expected=' + (currentStep ? currentStep.duration * 1000 : 'n/a') +
-        ' scheduleLen=' + schedule.length;
-    }
   }
 
   function pauseTimer(){
@@ -1513,7 +1430,13 @@
     updateEstSpeed();
     if (calculatedStride !== null) updateTimeEstimate(parseFloat(calcBeatsEl.value));
   });
+  bpmInputEl.addEventListener('input', () => {
+    // live text preview only — restarting the metronome mid-keystroke would be jarring
+    updateEstSpeed();
+    if (calculatedStride !== null) updateTimeEstimate(parseFloat(calcBeatsEl.value));
+  });
   strideInputEl.addEventListener('change', () => { updateEstSpeed(); });
+  strideInputEl.addEventListener('input', () => { updateEstSpeed(); });
 
   clearHistoryBtnEl.addEventListener('click', () => {
     beatHistory = [];
@@ -1572,6 +1495,19 @@
     customIntervals.push({ duration, bpm });
     renderCustomIntervalList();
     if (!running) resetTimer();
+
+    // release focus from either field first, then reset values on the next tick —
+    // avoids interfering with the phone's keyboard/focus state right after a tap
+    newIntervalDurationEl.blur();
+    newIntervalBpmEl.blur();
+    setTimeout(() => {
+      newIntervalDurationEl.value = 30;
+      newIntervalBpmEl.value = 100;
+    }, 50);
+
+    const originalLabel = addIntervalBtnEl.textContent;
+    addIntervalBtnEl.textContent = 'Added!';
+    setTimeout(() => { addIntervalBtnEl.textContent = originalLabel; }, 1000);
   });
 
   renderCustomIntervalList();
@@ -1716,7 +1652,7 @@
   const calcAddIntervalRowEl = document.getElementById('calcAddIntervalRow');
 
   function updateTimeEstimate(beats){
-    const bpm = getBpm();
+    const bpm = Math.max(20, Math.min(300, parseInt(bpmInputEl.value) || 100));
     if (!bpm || bpm <= 0){
       calcTimeResultEl.textContent = '';
       calcAddIntervalRowEl.style.display = 'none';
@@ -1921,355 +1857,6 @@
   renderBeatHistory();
   runCalculator();
 
-  // --- Tab switching ---
-  const tabTimer = document.getElementById('tabTimer');
-  const tabSpeed = document.getElementById('tabSpeed');
-  const timerView = document.getElementById('timerView');
-  const speedView = document.getElementById('speedView');
-
-  function showView(name){
-    const isTimer = name === 'timer';
-    tabTimer.classList.toggle('active', isTimer);
-    tabSpeed.classList.toggle('active', !isTimer);
-    timerView.classList.toggle('active', isTimer);
-    speedView.classList.toggle('active', !isTimer);
-  }
-  tabTimer.addEventListener('click', () => showView('timer'));
-  tabSpeed.addEventListener('click', () => showView('speed'));
-
-  // --- GPS Speedometer ---
-  const sp = {
-    status: document.getElementById('speedStatus'),
-    big: document.getElementById('speedBig'),
-    unitLabel: document.getElementById('speedUnitLabel'),
-    maxVal: document.getElementById('maxSpeedVal'),
-    avgVal: document.getElementById('avgSpeedVal'),
-    accuracyVal: document.getElementById('accuracyVal'),
-    toggleBtn: document.getElementById('speedToggleBtn'),
-    unitToggle: document.getElementById('unitToggle'),
-    mphLabel: document.getElementById('mphLabel'),
-    kmhLabel: document.getElementById('kmhLabel'),
-    voiceToggle: document.getElementById('voiceToggle'),
-    headingArrow: document.getElementById('headingArrow'),
-    headingVal: document.getElementById('headingVal'),
-    headingVoiceToggle: document.getElementById('headingVoiceToggle'),
-    distanceVal: document.getElementById('distanceVal'),
-    distanceVoiceToggle: document.getElementById('distanceVoiceToggle'),
-  };
-
-  let totalDistanceM = 0;
-  let lastAnnouncedSegment = 0; // in units of 500m
-  let distanceVoiceOn = false;
-
-  let voiceOn = false;
-  const CUE_POINTS_KMH = Array.from({ length: 15 }, (_, i) => i + 1); // 1..15
-  // track whether current speed is above each cue point, in km/h terms (fixed regardless of display unit)
-  let cueState = CUE_POINTS_KMH.map(() => false);
-
-  let headingVoiceOn = false;
-  let lastDegreeBucket = null;
-  const CARDINALS = ['N','NE','E','SE','S','SW','W','NW'];
-  const CARDINAL_NAMES = ['north','northeast','east','southeast','south','southwest','west','northwest'];
-
-  function degToCardinalIndex(deg){
-    return Math.round(((deg % 360) + 360) % 360 / 45) % 8;
-  }
-
-  let watchId = null;
-  let tracking = false;
-  let useKmh = true;
-  let maxSpeedMs = 0;
-  let lastPos = null;       // {lat, lon, t} fallback for devices without coords.speed
-  let speedSamples = [];    // for average (in m/s)
-  let currentSpeedMs = 0;
-
-  function metersPerSecTo(unitKmh, ms){
-    return unitKmh ? ms * 3.6 : ms * 2.23694;
-  }
-
-  // --- Voice selection ---
-  let selectedVoice = null;
-  const voiceSelectEl = document.getElementById('voiceSelect');
-
-  function populateVoices(){
-    if (!('speechSynthesis' in window)) return;
-    const voices = window.speechSynthesis.getVoices();
-    if (!voices.length) return;
-
-    // Prefer English voices first, but list all available
-    const sorted = [...voices].sort((a, b) => {
-      const aEn = a.lang.toLowerCase().startsWith('en') ? 0 : 1;
-      const bEn = b.lang.toLowerCase().startsWith('en') ? 0 : 1;
-      if (aEn !== bEn) return aEn - bEn;
-      return a.name.localeCompare(b.name);
-    });
-
-    voiceSelectEl.innerHTML = '';
-    sorted.forEach((v, i) => {
-      const opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = v.name + ' (' + v.lang + ')';
-      voiceSelectEl.appendChild(opt);
-    });
-
-    // Default to first English voice if none chosen yet
-    if (!selectedVoice){
-      selectedVoice = sorted[0];
-      voiceSelectEl.value = 0;
-    }
-    window._sortedVoices = sorted;
-  }
-
-  if ('speechSynthesis' in window){
-    populateVoices();
-    window.speechSynthesis.onvoiceschanged = populateVoices;
-  }
-
-  voiceSelectEl.addEventListener('change', () => {
-    const idx = parseInt(voiceSelectEl.value);
-    if (window._sortedVoices && window._sortedVoices[idx]){
-      selectedVoice = window._sortedVoices[idx];
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-      speak('Voice set');
-    }
-  });
-
-  function speak(text){
-    try{
-      if (!('speechSynthesis' in window)) return;
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = 1.0;
-      utter.volume = 1.0;
-      if (selectedVoice){
-        utter.voice = selectedVoice;
-        utter.lang = selectedVoice.lang; // required on Android or it silently falls back to default
-      }
-      window.speechSynthesis.speak(utter);
-    }catch(e){}
-  }
-
-  function checkVoiceThreshold(){
-    if (!voiceOn) return;
-    const currentKmh = currentSpeedMs * 3.6; // fixed unit for cue points regardless of display unit
-
-    CUE_POINTS_KMH.forEach((point, i) => {
-      const isAbove = currentKmh >= point;
-      if (isAbove !== cueState[i]){
-        speak(point + ' kilometers per hour');
-        cueState[i] = isAbove;
-      }
-    });
-  }
-
-  function refreshSpeedDisplay(){
-    const disp = metersPerSecTo(useKmh, currentSpeedMs);
-    sp.big.textContent = disp.toFixed(1);
-    sp.unitLabel.textContent = useKmh ? 'km/h' : 'mph';
-    sp.maxVal.textContent = metersPerSecTo(useKmh, maxSpeedMs).toFixed(1);
-    const avg = speedSamples.length
-      ? speedSamples.reduce((a,b) => a+b, 0) / speedSamples.length
-      : 0;
-    sp.avgVal.textContent = metersPerSecTo(useKmh, avg).toFixed(1);
-    checkVoiceThreshold();
-  }
-
-  function haversineMeters(lat1, lon1, lat2, lon2){
-    const R = 6371000;
-    const toRad = d => d * Math.PI / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  }
-
-  function onPosition(pos){
-    const c = pos.coords;
-    let speedMs = null;
-
-    if (typeof c.speed === 'number' && c.speed !== null && !isNaN(c.speed)){
-      speedMs = c.speed;
-    } else if (lastPos){
-      const dt = (pos.timestamp - lastPos.t) / 1000;
-      if (dt > 0.3){
-        const dist = haversineMeters(lastPos.lat, lastPos.lon, c.latitude, c.longitude);
-        speedMs = dist / dt;
-      }
-    }
-    if (lastPos){
-      const dtDist = (pos.timestamp - lastPos.t) / 1000;
-      const distDelta = haversineMeters(lastPos.lat, lastPos.lon, c.latitude, c.longitude);
-      // ignore GPS jitter (<2m) and implausible jumps (bad fix)
-      if (dtDist > 0 && distDelta > 2 && (distDelta / dtDist) < 55){
-        totalDistanceM += distDelta;
-      }
-    }
-    lastPos = { lat: c.latitude, lon: c.longitude, t: pos.timestamp };
-
-    if (speedMs !== null && speedMs >= 0 && speedMs < 120){ // sanity cap ~430km/h
-      currentSpeedMs = speedMs;
-      if (speedMs > maxSpeedMs) maxSpeedMs = speedMs;
-      speedSamples.push(speedMs);
-      if (speedSamples.length > 600) speedSamples.shift();
-    }
-
-    sp.status.textContent = 'Tracking · live signal';
-    sp.status.classList.add('tracking');
-    sp.status.classList.remove('error');
-    sp.accuracyVal.textContent = c.accuracy ? Math.round(c.accuracy) + 'm' : '—';
-
-    updateHeading(c.heading);
-    updateDistance();
-
-    refreshSpeedDisplay();
-  }
-
-  function distanceCueLabel(meters){
-    if (meters < 1000) return meters + ' meters';
-    const km = meters / 1000;
-    if (Number.isInteger(km)) return km + (km === 1 ? ' kilometer' : ' kilometers');
-    return km + ' kilometers'; // e.g. "1.5 kilometers"
-  }
-
-  function updateDistance(){
-    const km = totalDistanceM / 1000;
-    sp.distanceVal.textContent = km.toFixed(2) + ' km';
-
-    if (distanceVoiceOn){
-      const segment = Math.floor(totalDistanceM / 500);
-      if (segment > lastAnnouncedSegment){
-        lastAnnouncedSegment = segment;
-        speak(distanceCueLabel(segment * 500));
-      }
-    }
-  }
-
-  function updateHeading(heading){
-    const hasHeading = typeof heading === 'number' && !isNaN(heading) && currentSpeedMs > 0.4; // GPS heading unreliable near-stationary
-    if (!hasHeading){
-      sp.headingVal.textContent = 'Heading —';
-      return;
-    }
-    const idx = degToCardinalIndex(heading);
-    sp.headingVal.textContent = 'Heading ' + CARDINALS[idx] + ' · ' + Math.round(heading) + '°';
-    sp.headingArrow.style.transform = 'rotate(' + Math.round(heading) + 'deg)';
-
-    if (headingVoiceOn){
-      const DEGREE_STEP = 15; // bucket to nearest 15° so GPS jitter doesn't cause constant chatter
-      const norm = ((heading % 360) + 360) % 360;
-      const bucket = Math.round(norm / DEGREE_STEP) * DEGREE_STEP % 360;
-      if (lastDegreeBucket === null){
-        lastDegreeBucket = bucket;
-      } else if (bucket !== lastDegreeBucket){
-        speak(bucket + ' degrees');
-        lastDegreeBucket = bucket;
-      }
-    }
-  }
-
-  function onPositionError(err){
-    tracking = false;
-    sp.status.textContent = 'GPS error: ' + (err.message || 'permission denied');
-    sp.status.classList.add('error');
-    sp.status.classList.remove('tracking');
-    sp.toggleBtn.textContent = 'Start Tracking';
-    sp.toggleBtn.classList.remove('stop');
-    if (watchId !== null){
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-    stopActiveModeIfIdle();
-  }
-
-  function startTracking(){
-    if (!('geolocation' in navigator)){
-      sp.status.textContent = 'Geolocation not supported on this device';
-      sp.status.classList.add('error');
-      return;
-    }
-    tracking = true;
-    maxSpeedMs = 0;
-    speedSamples = [];
-    currentSpeedMs = 0;
-    lastPos = null;
-    cueState = CUE_POINTS_KMH.map(() => false);
-    lastDegreeBucket = null;
-    sp.headingVal.textContent = 'Heading —';
-    totalDistanceM = 0;
-    lastAnnouncedSegment = 0;
-    sp.distanceVal.textContent = '0.00 km';
-    sp.status.textContent = 'Requesting location access…';
-    sp.status.classList.remove('error');
-    sp.toggleBtn.textContent = 'Stop Tracking';
-    sp.toggleBtn.classList.add('stop');
-    refreshSpeedDisplay();
-
-    watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
-      enableHighAccuracy: true,
-      maximumAge: 500,
-      timeout: 10000,
-    });
-    startActiveMode();
-  }
-
-  function stopTracking(){
-    tracking = false;
-    if (watchId !== null){
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-    sp.status.textContent = 'GPS idle · tap start to track';
-    sp.status.classList.remove('tracking');
-    sp.status.classList.remove('error');
-    sp.toggleBtn.textContent = 'Start Tracking';
-    sp.toggleBtn.classList.remove('stop');
-    sp.accuracyVal.textContent = '—';
-    sp.headingVal.textContent = 'Heading —';
-    sp.headingArrow.style.transform = 'rotate(0deg)';
-    stopActiveModeIfIdle();
-  }
-
-  sp.toggleBtn.addEventListener('click', () => {
-    if (tracking) stopTracking(); else startTracking();
-  });
-
-  sp.unitToggle.addEventListener('click', () => {
-    useKmh = !useKmh;
-    sp.unitToggle.classList.toggle('on', useKmh);
-    sp.mphLabel.classList.toggle('on', !useKmh);
-    sp.kmhLabel.classList.toggle('on', useKmh);
-    refreshSpeedDisplay();
-  });
-
-  sp.voiceToggle.addEventListener('click', () => {
-    voiceOn = !voiceOn;
-    sp.voiceToggle.classList.toggle('on', voiceOn);
-    cueState = CUE_POINTS_KMH.map(() => false);
-    if (voiceOn && 'speechSynthesis' in window){
-      // unlock speech synthesis on user gesture for mobile browsers
-      speak('Voice cues on');
-    }
-  });
-
-  sp.headingVoiceToggle.addEventListener('click', () => {
-    headingVoiceOn = !headingVoiceOn;
-    sp.headingVoiceToggle.classList.toggle('on', headingVoiceOn);
-    lastDegreeBucket = null;
-    if (headingVoiceOn && 'speechSynthesis' in window){
-      speak('Heading cues on');
-    }
-  });
-
-  sp.distanceVoiceToggle.addEventListener('click', () => {
-    distanceVoiceOn = !distanceVoiceOn;
-    sp.distanceVoiceToggle.classList.toggle('on', distanceVoiceOn);
-    lastAnnouncedSegment = Math.floor(totalDistanceM / 500);
-    if (distanceVoiceOn && 'speechSynthesis' in window){
-      speak('Distance cues on');
-    }
-  });
-
-  // Stop GPS if tab hidden for a long time to save battery is left to the user;
-  // we keep tracking active across tab switches within the app intentionally.
 })();
 </script>
 
@@ -2281,6 +1868,5 @@
   }
 </script>
 
-<div class="dim-hint" id="dimHint">Tap anywhere to brighten</div>
 </body>
 </html>
