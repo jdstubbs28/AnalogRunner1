@@ -641,7 +641,7 @@
 
 <div class="app">
   <div class="eyebrow">
-    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v29</span>
+    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v31</span>
     <span id="totalLabel">00:00 TOTAL</span>
   </div>
 
@@ -754,6 +754,7 @@
           <div class="switch" id="strideVoiceToggle"></div>
         </div>
         <div class="cue-points">Speaks your stride length setting at the start of each custom interval</div>
+        <div class="cue-points" id="strideVoiceDebug"></div>
       </div>
 
       <div class="toggle-row">
@@ -960,9 +961,22 @@
   let strideVoiceOn = false;
 
   function announceStrideIfNeeded(step){
-    if (!strideVoiceOn || !customModeOn || !step || step.type !== 'work') return;
+    const debugEl = document.getElementById('strideVoiceDebug');
+    if (!strideVoiceOn){
+      if (debugEl) debugEl.textContent = '';
+      return;
+    }
+    if (!customModeOn){
+      if (debugEl) debugEl.textContent = 'Stride voice: skipped (Custom intervals is off)';
+      return;
+    }
+    if (!step || step.type !== 'work'){
+      if (debugEl) debugEl.textContent = 'Stride voice: skipped (step type = ' + (step ? step.type : 'none') + ')';
+      return;
+    }
     const stride = parseFloat(strideInputEl.value) || 1.0;
     speak('Stride length ' + stride.toFixed(1) + ' meters');
+    if (debugEl) debugEl.textContent = 'Stride voice: announced ' + stride.toFixed(1) + 'm at ' + new Date().toLocaleTimeString();
   }
 
   function buildSchedule(){
@@ -1270,6 +1284,15 @@
     announceStrideIfNeeded(step);
     stopMetronome(); // force a fresh restart so a per-step custom bpm always takes effect
     syncMetronome();
+
+    const dbgEl2 = document.getElementById('strideVoiceDebug');
+    if (dbgEl2){
+      dbgEl2.textContent = 'DEBUG advance: voiceOn=' + strideVoiceOn +
+        ' customOn=' + customModeOn +
+        ' stepIdx=' + stepIndex +
+        ' stepType=' + step.type;
+    }
+
     if (step.type === 'done'){
       finish();
     }
@@ -1399,6 +1422,18 @@
     const currentStep = schedule[stepIndex];
     if (currentStep && remaining === currentStep.duration * 1000){
       announceStrideIfNeeded(currentStep);
+    }
+
+    // unconditional diagnostic dump — always shows on Start, regardless of any condition above
+    const dbgEl = document.getElementById('strideVoiceDebug');
+    if (dbgEl){
+      dbgEl.textContent = 'DEBUG start: voiceOn=' + strideVoiceOn +
+        ' customOn=' + customModeOn +
+        ' stepIdx=' + stepIndex +
+        ' stepType=' + (currentStep ? currentStep.type : 'none') +
+        ' remaining=' + remaining +
+        ' expected=' + (currentStep ? currentStep.duration * 1000 : 'n/a') +
+        ' scheduleLen=' + schedule.length;
     }
   }
 
