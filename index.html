@@ -1,0 +1,2063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Interval Clock</title>
+
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#14161a">
+
+<!-- iOS install support -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Interval">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+<link rel="icon" href="./icon-192.png">
+<style>
+  :root{
+    --bg: #14161a;
+    --panel: #1b1e24;
+    --line: #2a2e36;
+    --ink: #eef0f2;
+    --dim: #8a909c;
+    --work: #ff6a3d;
+    --rest: #35c9c1;
+    --warm: #e8c547;
+    --done: #7ee787;
+    --speed: #4d8dff;
+    --mono: 'JetBrains Mono', 'SF Mono', 'Courier New', monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    height:100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing:antialiased;
+    filter: brightness(1);
+    transition: filter 1.2s ease;
+  }
+  body.dimmed{
+    filter: brightness(0.32);
+  }
+  .dim-hint{
+    position:fixed;
+    bottom:14px;
+    left:0; right:0;
+    text-align:center;
+    font-family: var(--mono);
+    font-size:10px;
+    letter-spacing:.08em;
+    color:#4a4f58;
+    text-transform:uppercase;
+    opacity:0;
+    transition: opacity .3s ease;
+    pointer-events:none;
+  }
+  .wake-status{
+    text-align:center;
+    font-family: var(--mono);
+    font-size:10px;
+    letter-spacing:.05em;
+    color:#565b64;
+    margin-top:10px;
+    min-height:12px;
+  }
+  .wake-status.active{ color: var(--speed); }
+  .wake-status.failed{ color: var(--work); }
+  .cue-points{
+    text-align:center;
+    font-size:11.5px;
+    color:var(--dim);
+    margin-top:10px;
+    line-height:1.5;
+  }
+  .beat-counter{
+    text-align:center;
+    font-family: var(--mono);
+    font-size:15px;
+    font-weight:600;
+    color: var(--speed);
+    margin-top:12px;
+    min-height:18px;
+  }
+  .beat-history{
+    text-align:center;
+    font-family: var(--mono);
+    font-size:11px;
+    color:var(--dim);
+    margin-top:6px;
+    line-height:1.6;
+    min-height:12px;
+  }
+  .clear-history-row{
+    text-align:center;
+    margin-top:8px;
+  }
+  .text-btn{
+    background:transparent;
+    border:none;
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size:11px;
+    letter-spacing:.05em;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:4px 8px;
+    flex:none;
+  }
+  .text-btn:hover{ color: var(--ink); }
+  .calc-box{
+    margin-top:20px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+  }
+  .calc-title{
+    font-family: var(--mono);
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--dim);
+    margin-bottom:12px;
+    text-align:center;
+  }
+  .plain-input{
+    width:100%;
+    background:#12141a;
+    border:1px solid var(--line);
+    border-radius:10px;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size:14px;
+    padding:10px 12px;
+    text-align:center;
+  }
+  .plain-input:focus{ outline:none; border-color:#3a3f49; }
+  .calc-result{
+    text-align:center;
+    font-family: var(--mono);
+    font-size:12.5px;
+    color: var(--speed);
+    margin-top:12px;
+    line-height:1.6;
+    min-height:16px;
+  }
+  .calc-apply-row{
+    text-align:center;
+    margin-top:4px;
+  }
+  .stride-chart-wrap{
+    margin-top:14px;
+  }
+  .stride-chart{
+    width:100%;
+    height:auto;
+    display:block;
+  }
+  .stride-chart circle{
+    transition: cx 0.3s ease;
+  }
+  .stride-chart.dragging circle{
+    transition: none;
+  }
+  .footprint{
+    fill: var(--speed);
+    opacity: 0.6;
+    animation: footprintFadeIn 0.25s ease backwards;
+  }
+  @keyframes footprintFadeIn{
+    from{ opacity:0; }
+    to{ opacity:0.6; }
+  }
+  .stride-chart text#strideMarkerLabel{
+    transition: x 0.3s ease;
+  }
+  .custom-interval-list{
+    margin-bottom:12px;
+  }
+  .custom-interval-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:#12141a;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 14px;
+    margin-bottom:8px;
+    font-family: var(--mono);
+    font-size:13px;
+  }
+  .custom-interval-row .label{
+    color: var(--ink);
+  }
+  .custom-interval-row .remove-btn{
+    background:transparent;
+    border:none;
+    color: var(--work);
+    font-size:16px;
+    cursor:pointer;
+    padding:0 4px;
+    flex:none;
+  }
+  .session-prompt{
+    margin-top:18px;
+    padding:16px;
+    background:#12141a;
+    border:1px solid var(--speed);
+    border-radius:14px;
+  }
+  .session-prompt .plain-input{
+    margin-top:10px;
+  }
+  .session-prompt .clear-history-row{
+    display:flex;
+    justify-content:center;
+    gap:16px;
+    margin-top:10px;
+  }
+  .heading-row{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    margin-top:20px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+  }
+  .heading-arrow{
+    color: var(--speed);
+    transition: transform .35s ease;
+    flex:0 0 auto;
+  }
+  .heading-text{
+    font-family: var(--mono);
+    font-size:13px;
+    letter-spacing:.06em;
+    color: var(--ink);
+  }
+  .distance-row{
+    text-align:center;
+    margin-top:10px;
+  }
+  .distance-text{
+    font-family: var(--mono);
+    font-size:13px;
+    letter-spacing:.06em;
+    color: var(--ink);
+  }
+  .voice-select{
+    width:100%;
+    background:#12141a;
+    border:1px solid var(--line);
+    border-radius:10px;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size:14px;
+    padding:11px 12px;
+    appearance:none;
+    -webkit-appearance:none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a909c' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+  }
+  .voice-select:focus{ outline:none; border-color:#3a3f49; }
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    min-height:100vh;
+  }
+  .app{
+    width:100%;
+    max-width:460px;
+  }
+  .eyebrow{
+    font-family: var(--mono);
+    font-size:11px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--dim);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:14px;
+  }
+  .eyebrow .dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--dim);
+    display:inline-block;
+    margin-right:6px;
+  }
+  .eyebrow .dot.live{ background: var(--work); box-shadow:0 0 8px var(--work); }
+
+  .tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:14px;
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:4px;
+  }
+  .tab{
+    flex:1;
+    text-align:center;
+    padding:9px 0;
+    font-family: var(--mono);
+    font-size:11.5px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--dim);
+    border-radius:9px;
+    cursor:pointer;
+    user-select:none;
+    transition: background .15s ease, color .15s ease;
+  }
+  .tab.active{
+    background:#12141a;
+    color:var(--ink);
+  }
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  .stage{
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:28px 24px 22px;
+    position:relative;
+    overflow:hidden;
+  }
+
+  .speed-stage{
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:32px 24px 26px;
+    text-align:center;
+  }
+  .speed-status{
+    font-family: var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--dim);
+    margin-bottom:18px;
+    min-height:14px;
+  }
+  .speed-status.tracking{ color: var(--speed); }
+  .speed-status.error{ color: var(--work); }
+  .speed-big{
+    font-family: var(--mono);
+    font-size:84px;
+    font-weight:700;
+    letter-spacing:-.02em;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    line-height:1;
+  }
+  .speed-unit{
+    font-family: var(--mono);
+    font-size:14px;
+    color:var(--dim);
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    margin-top:8px;
+  }
+  .speed-stats{
+    display:flex;
+    justify-content:center;
+    gap:36px;
+    margin-top:26px;
+    padding-top:20px;
+    border-top:1px solid var(--line);
+  }
+  .speed-stat{ text-align:center; }
+  .speed-stat .val{
+    font-family: var(--mono);
+    font-size:20px;
+    font-weight:600;
+    color: var(--ink);
+  }
+  .speed-stat .lbl{
+    font-family: var(--mono);
+    font-size:10px;
+    color:var(--dim);
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    margin-top:4px;
+  }
+  .speed-controls{
+    display:flex;
+    gap:10px;
+    margin-top:22px;
+  }
+  #speedToggleBtn{
+    background: var(--speed);
+    color:#081326;
+  }
+  #speedToggleBtn.stop{
+    background: transparent;
+    border:1px solid var(--line);
+    color: var(--dim);
+  }
+  .unit-switch-row{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:16px;
+  }
+  .unit-switch-row span{
+    font-size:11px;
+    font-family: var(--mono);
+    color:var(--dim);
+    letter-spacing:.06em;
+  }
+  .unit-switch-row span.on{ color: var(--ink); }
+  .phase-label{
+    font-family: var(--mono);
+    font-size:13px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    text-align:center;
+    margin-bottom:6px;
+    transition:color .25s ease;
+  }
+  .round-label{
+    text-align:center;
+    font-size:12px;
+    color:var(--dim);
+    margin-bottom:18px;
+    font-family: var(--mono);
+    letter-spacing:.06em;
+  }
+
+  .ring-wrap{
+    position:relative;
+    width:260px;
+    height:260px;
+    margin:0 auto 22px;
+  }
+  svg.ring{ transform:rotate(-90deg); width:100%; height:100%; }
+  .ring-track{ fill:none; stroke:var(--line); stroke-width:10; }
+  .ring-progress{
+    fill:none;
+    stroke-width:10;
+    stroke-linecap:round;
+    transition: stroke-dashoffset .25s linear, stroke .3s ease;
+  }
+  .ring-center{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+  }
+  .time{
+    font-family: var(--mono);
+    font-size:56px;
+    font-weight:600;
+    letter-spacing:-.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .next-up{
+    margin-top:6px;
+    font-size:11px;
+    color:var(--dim);
+    font-family: var(--mono);
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    height:14px;
+  }
+
+  .controls{
+    display:flex;
+    gap:10px;
+    margin-top:4px;
+  }
+  button{
+    font-family: var(--sans);
+    font-weight:600;
+    font-size:14px;
+    border:none;
+    border-radius:12px;
+    padding:14px 0;
+    cursor:pointer;
+    flex:1;
+    transition: transform .08s ease, filter .15s ease;
+    letter-spacing:.01em;
+  }
+  button:active{ transform: scale(.97); }
+  #startPause{
+    background: var(--work);
+    color:#1a0d06;
+  }
+  #startPause:hover{ filter:brightness(1.08); }
+  #reset{
+    background: transparent;
+    border:1px solid var(--line);
+    color: var(--dim);
+  }
+  #reset:hover{ color:var(--ink); border-color:#3a3f49; }
+
+  .setup{
+    margin-top:16px;
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:20px;
+  }
+  .setup-title{
+    font-family: var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--dim);
+    margin-bottom:14px;
+  }
+  .field-row{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:12px;
+    margin-bottom:12px;
+  }
+  .field{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .field label{
+    font-size:11px;
+    color:var(--dim);
+    font-family: var(--mono);
+    letter-spacing:.05em;
+  }
+  .stepper{
+    display:flex;
+    align-items:center;
+    background:#12141a;
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .stepper button{
+    flex:0 0 auto;
+    width:34px;
+    padding:8px 0;
+    background:transparent;
+    color:var(--dim);
+    font-size:16px;
+    border-radius:0;
+  }
+  .stepper button:hover{ color: var(--ink); background:#1c1f26; }
+  .stepper input{
+    flex:1;
+    text-align:center;
+    background:transparent;
+    border:none;
+    color:var(--ink);
+    font-family: var(--mono);
+    font-size:15px;
+    font-weight:600;
+    -moz-appearance:textfield;
+  }
+  .stepper input::-webkit-outer-spin-button,
+  .stepper input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .stepper input:focus{ outline:none; }
+
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding-top:6px;
+    border-top:1px solid var(--line);
+    margin-top:4px;
+  }
+  .toggle-row span{
+    font-size:12.5px;
+    color:var(--ink);
+  }
+  .switch{
+    position:relative;
+    width:40px;
+    height:22px;
+    background:#12141a;
+    border:1px solid var(--line);
+    border-radius:20px;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+  .switch::after{
+    content:'';
+    position:absolute;
+    top:2px; left:2px;
+    width:16px; height:16px;
+    border-radius:50%;
+    background:var(--dim);
+    transition: transform .18s ease, background .18s ease;
+  }
+  .switch.on{ border-color: var(--warm); }
+  .switch.on::after{ transform: translateX(18px); background: var(--warm); }
+
+  .hint{
+    text-align:center;
+    font-size:11px;
+    color:#565b64;
+    font-family: var(--mono);
+    margin-top:14px;
+    letter-spacing:.04em;
+  }
+
+  @media (max-width:420px){
+    .ring-wrap{ width:220px; height:220px; }
+    .time{ font-size:46px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="eyebrow">
+    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v17</span>
+    <span id="totalLabel">00:00 TOTAL</span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tabTimer" data-view="timer">Timer</div>
+    <div class="tab" id="tabSpeed" data-view="speed">Speedometer</div>
+  </div>
+
+  <div class="view active" id="timerView">
+    <div class="stage">
+      <div class="phase-label" id="phaseLabel">READY</div>
+      <div class="round-label" id="roundLabel">Set your rounds below</div>
+
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 260 260">
+          <circle class="ring-track" cx="130" cy="130" r="115"></circle>
+          <circle class="ring-progress" id="ringProgress" cx="130" cy="130" r="115"
+                  stroke="#ff6a3d" stroke-dasharray="722.6" stroke-dashoffset="0"></circle>
+        </svg>
+        <div class="ring-center">
+          <div class="time" id="timeDisplay">00:30</div>
+          <div class="next-up" id="nextUp"></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="startPause">Start</button>
+        <button id="reset">Reset</button>
+      </div>
+
+      <div class="session-prompt" id="sessionPrompt" style="display:none;">
+        <div class="calc-title">Session complete — how far did you go?</div>
+        <div class="cue-points" id="sessionBeatsLabel"></div>
+        <input type="number" id="sessionDistanceInput" class="plain-input" placeholder="Distance in meters" min="0">
+        <div class="calc-result" id="sessionResult"></div>
+        <div class="clear-history-row">
+          <button id="sessionCalcBtn" class="text-btn">Calculate &amp; apply stride length</button>
+          <button id="sessionSkipBtn" class="text-btn">Skip</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="setup">
+      <div class="setup-title">Configure</div>
+
+      <div class="toggle-row">
+        <span>Custom intervals</span>
+        <div class="switch" id="customModeToggle"></div>
+      </div>
+
+      <div id="simpleConfigWrap">
+      <div class="field-row">
+        <div class="field">
+          <label>Work (sec)</label>
+          <div class="stepper">
+            <button data-target="work" data-step="-5">–</button>
+            <input type="number" id="workInput" value="30" min="1">
+            <button data-target="work" data-step="5">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Rest (sec)</label>
+          <div class="stepper">
+            <button data-target="rest" data-step="-5">–</button>
+            <input type="number" id="restInput" value="15" min="0">
+            <button data-target="rest" data-step="5">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Rounds</label>
+          <div class="stepper">
+            <button data-target="rounds" data-step="-1">–</button>
+            <input type="number" id="roundsInput" value="8" min="1">
+            <button data-target="rounds" data-step="1">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Warm-up (sec)</label>
+          <div class="stepper">
+            <button data-target="warmup" data-step="-5">–</button>
+            <input type="number" id="warmupInput" value="10" min="0">
+            <button data-target="warmup" data-step="5">+</button>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <div id="customConfigWrap" style="display:none;">
+        <div class="custom-interval-list" id="customIntervalList"></div>
+        <div class="field-row">
+          <div class="field">
+            <label>Duration (sec)</label>
+            <input type="number" id="newIntervalDuration" class="plain-input" value="30" min="1">
+          </div>
+          <div class="field">
+            <label>BPM</label>
+            <input type="number" id="newIntervalBpm" class="plain-input" value="100" min="20" max="300">
+          </div>
+        </div>
+        <div class="clear-history-row">
+          <button id="addIntervalBtn" class="text-btn">+ Add interval</button>
+        </div>
+        <div class="cue-points">Rest and Warm-up above still apply between your custom intervals</div>
+      </div>
+
+      <div class="toggle-row">
+        <span>Sound cues</span>
+        <div class="switch on" id="soundToggle"></div>
+      </div>
+
+      <div class="toggle-row" style="margin-top:6px;">
+        <span>Metronome (work only)</span>
+        <div class="switch" id="metronomeToggle"></div>
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label>Metronome BPM</label>
+        <div class="stepper">
+          <button data-target="bpm" data-step="-5">–</button>
+          <input type="number" id="bpmInput" value="100" min="20" max="300">
+          <button data-target="bpm" data-step="5">+</button>
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label>Stride length (m per beat)</label>
+        <div class="stepper">
+          <button data-target="stride" data-step="-0.1">–</button>
+          <input type="number" id="strideInput" value="1.0" min="0.1" max="3" step="0.1">
+          <button data-target="stride" data-step="0.1">+</button>
+        </div>
+      </div>
+      <div class="beat-counter" id="beatCounter"></div>
+      <div class="cue-points" id="estSpeedLabel"></div>
+      <div class="beat-history" id="beatHistory"></div>
+      <div class="clear-history-row" id="clearHistoryRow" style="display:none;">
+        <button id="clearHistoryBtn" class="text-btn">Clear saved rounds</button>
+      </div>
+
+      <div class="calc-box">
+        <div class="calc-title">Stride length calculator</div>
+        <div class="field-row">
+          <div class="field">
+            <label>Beats (from a saved round)</label>
+            <input type="number" id="calcBeats" class="plain-input" placeholder="e.g. 240" min="0">
+          </div>
+          <div class="field">
+            <label>Distance covered (m)</label>
+            <input type="number" id="calcDistance" class="plain-input" placeholder="e.g. 250" min="0">
+          </div>
+        </div>
+        <div class="calc-result" id="calcResult">Enter beats and distance to work out your stride length</div>
+
+        <div class="stride-chart-wrap" id="strideChartWrap" style="display:none;">
+          <svg class="stride-chart" viewBox="0 0 300 70" xmlns="http://www.w3.org/2000/svg">
+            <line x1="20" y1="35" x2="280" y2="35" stroke="var(--line)" stroke-width="2"></line>
+            <g id="footprintsGroup"></g>
+            <line id="tickWalk" x1="0" y1="26" x2="0" y2="44" stroke="var(--dim)" stroke-width="1.5"></line>
+            <line id="tickRun" x1="0" y1="26" x2="0" y2="44" stroke="var(--dim)" stroke-width="1.5"></line>
+            <text id="tickWalkLabel" x="0" y="58" font-size="9" fill="var(--dim)" text-anchor="middle" font-family="var(--mono)">walk</text>
+            <text id="tickRunLabel" x="0" y="58" font-size="9" fill="var(--dim)" text-anchor="middle" font-family="var(--mono)">run</text>
+            <text x="20" y="14" font-size="9" fill="var(--dim)" text-anchor="start" font-family="var(--mono)">0m</text>
+            <text x="280" y="14" font-size="9" fill="var(--dim)" text-anchor="end" font-family="var(--mono)">2m</text>
+            <circle id="strideMarkerHitArea" cx="20" cy="35" r="16" fill="transparent" style="cursor:grab; touch-action:none;"></circle>
+            <circle id="strideMarker" cx="20" cy="35" r="7" fill="var(--speed)" style="pointer-events:none;"></circle>
+            <text id="strideMarkerLabel" x="20" y="12" font-size="10" fill="var(--speed)" text-anchor="middle" font-family="var(--mono)" font-weight="600"></text>
+          </svg>
+          <div class="cue-points">Drag the dot to adjust</div>
+        </div>
+
+        <div class="calc-apply-row" id="calcApplyRow" style="display:none;">
+          <button id="calcApplyBtn" class="text-btn">Use this stride length above</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint">SPACE TO START/PAUSE · R TO RESET</div>
+    <div class="wake-status" id="wakeStatus1"></div>
+  </div>
+
+  <div class="view" id="speedView">
+    <div class="speed-stage">
+      <div class="speed-status" id="speedStatus">GPS idle · tap start to track</div>
+
+      <div class="speed-big" id="speedBig">0.0</div>
+      <div class="speed-unit" id="speedUnitLabel">km/h</div>
+
+      <div class="speed-stats">
+        <div class="speed-stat">
+          <div class="val" id="maxSpeedVal">0.0</div>
+          <div class="lbl">Max</div>
+        </div>
+        <div class="speed-stat">
+          <div class="val" id="avgSpeedVal">0.0</div>
+          <div class="lbl">Avg</div>
+        </div>
+        <div class="speed-stat">
+          <div class="val" id="accuracyVal">—</div>
+          <div class="lbl">Accuracy</div>
+        </div>
+      </div>
+
+      <div class="heading-row">
+        <svg class="heading-arrow" id="headingArrow" viewBox="0 0 24 24" width="20" height="20">
+          <path d="M12 2 L17 20 L12 16 L7 20 Z" fill="currentColor"></path>
+        </svg>
+        <span class="heading-text" id="headingVal">Heading —</span>
+      </div>
+
+      <div class="distance-row">
+        <span class="distance-text" id="distanceVal">0.00 km</span>
+      </div>
+
+      <div class="speed-controls">
+        <button id="speedToggleBtn">Start Tracking</button>
+      </div>
+
+      <div class="unit-switch-row">
+        <span id="mphLabel">mph</span>
+        <div class="switch on" id="unitToggle"></div>
+        <span id="kmhLabel" class="on">km/h</span>
+      </div>
+
+      <div class="toggle-row" style="margin-top:16px;">
+        <span>Voice heading cues</span>
+        <div class="switch" id="headingVoiceToggle"></div>
+      </div>
+
+      <div class="toggle-row" style="margin-top:16px;">
+        <span>Voice distance cues</span>
+        <div class="switch" id="distanceVoiceToggle"></div>
+      </div>
+      <div class="cue-points">Calls out every 500 meters covered</div>
+
+      <div class="toggle-row" style="margin-top:16px;">
+        <span>Voice speed cues</span>
+        <div class="switch" id="voiceToggle"></div>
+      </div>
+      <div class="cue-points" id="cuePointsLabel">Calls out every 1 km/h from 1–15, speeding up or slowing down</div>
+
+      <div class="field" style="margin-top:16px;">
+        <label>Voice</label>
+        <select id="voiceSelect" class="voice-select">
+          <option value="">Loading voices…</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint">GPS ACCURACY DEPENDS ON SIGNAL · BEST OUTDOORS</div>
+    <div class="wake-status" id="wakeStatus2"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const CIRC = 2 * Math.PI * 115;
+
+  const els = {
+    phaseLabel: document.getElementById('phaseLabel'),
+    roundLabel: document.getElementById('roundLabel'),
+    timeDisplay: document.getElementById('timeDisplay'),
+    nextUp: document.getElementById('nextUp'),
+    ring: document.getElementById('ringProgress'),
+    startPause: document.getElementById('startPause'),
+    reset: document.getElementById('reset'),
+    liveDot: document.getElementById('liveDot'),
+    totalLabel: document.getElementById('totalLabel'),
+    soundToggle: document.getElementById('soundToggle'),
+    workInput: document.getElementById('workInput'),
+    restInput: document.getElementById('restInput'),
+    roundsInput: document.getElementById('roundsInput'),
+    warmupInput: document.getElementById('warmupInput'),
+  };
+
+  const COLORS = { warmup: '#e8c547', work: '#ff6a3d', rest: '#35c9c1', done: '#7ee787' };
+
+  let soundOn = true;
+  let running = false;
+  let schedule = [];   // list of {type, duration}
+  let stepIndex = 0;
+  let remaining = 0;   // ms remaining in current step
+  let lastTick = null;
+  let rafId = null;
+  let totalElapsed = 0;
+  let totalDuration = 0;
+
+  els.ring.setAttribute('stroke-dasharray', CIRC);
+
+  let customModeOn = false;
+  let customIntervals = []; // { duration, bpm }
+
+  function buildSchedule(){
+    const rest = Math.max(0, parseInt(els.restInput.value) || 0);
+    const warmup = Math.max(0, parseInt(els.warmupInput.value) || 0);
+    const s = [];
+
+    if (customModeOn && customIntervals.length){
+      if (warmup > 0) s.push({ type: 'warmup', duration: warmup });
+      customIntervals.forEach((ci, i) => {
+        s.push({ type: 'work', duration: ci.duration, round: i + 1, bpm: ci.bpm });
+        if (rest > 0 && i < customIntervals.length - 1) s.push({ type: 'rest', duration: rest, round: i + 1 });
+      });
+      s.push({ type: 'done', duration: 0 });
+      return s;
+    }
+
+    const work = Math.max(1, parseInt(els.workInput.value) || 30);
+    const rounds = Math.max(1, parseInt(els.roundsInput.value) || 1);
+
+    if (warmup > 0) s.push({ type: 'warmup', duration: warmup });
+    for (let i = 0; i < rounds; i++){
+      s.push({ type: 'work', duration: work, round: i + 1 });
+      if (rest > 0 && i < rounds - 1) s.push({ type: 'rest', duration: rest, round: i + 1 });
+    }
+    s.push({ type: 'done', duration: 0 });
+    return s;
+  }
+
+  function totalOf(s){
+    return s.reduce((a, x) => a + x.duration, 0);
+  }
+
+  function fmt(sec){
+    sec = Math.max(0, Math.ceil(sec));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+
+  function setPhaseVisual(type){
+    const color = COLORS[type] || COLORS.work;
+    els.ring.setAttribute('stroke', color);
+    els.phaseLabel.style.color = color;
+    els.startPause.style.background = (type === 'rest') ? color : COLORS.work;
+    els.startPause.style.color = (type === 'rest') ? '#06201f' : '#1a0d06';
+  }
+
+  function labelFor(step){
+    if (step.type === 'warmup') return 'WARM UP';
+    if (step.type === 'work') return 'WORK';
+    if (step.type === 'rest') return 'REST';
+    return 'DONE';
+  }
+
+  function roundsCount(){
+    if (customModeOn && customIntervals.length) return customIntervals.length;
+    return Math.max(1, parseInt(els.roundsInput.value) || 1);
+  }
+
+  function updateRoundLabel(step){
+    if (step.type === 'work' || step.type === 'rest'){
+      let label = 'Round ' + step.round + ' of ' + roundsCount();
+      if (customModeOn && step.type === 'work' && typeof step.bpm === 'number'){
+        label += ' · ' + step.bpm + ' bpm';
+      }
+      els.roundLabel.textContent = label;
+    } else if (step.type === 'warmup'){
+      els.roundLabel.textContent = 'Get ready';
+    } else {
+      els.roundLabel.textContent = 'Session complete';
+    }
+  }
+
+  function updateNextUp(){
+    const nxt = schedule[stepIndex + 1];
+    if (!nxt || nxt.type === 'done'){
+      els.nextUp.textContent = stepIndex < schedule.length - 1 ? 'FINAL STRETCH' : '';
+      return;
+    }
+    els.nextUp.textContent = 'NEXT: ' + labelFor(nxt) + ' · ' + nxt.duration + 's';
+  }
+
+  function renderStep(){
+    const step = schedule[stepIndex];
+    els.phaseLabel.textContent = labelFor(step);
+    updateRoundLabel(step);
+    setPhaseVisual(step.type);
+    updateNextUp();
+    if (step.type === 'done'){
+      els.timeDisplay.textContent = '00:00';
+      els.ring.style.strokeDashoffset = 0;
+    }
+  }
+
+  function updateTotalLabel(){
+    els.totalLabel.textContent = fmt(totalDuration - totalElapsed) + ' LEFT';
+  }
+
+  // --- Audio ---
+  let audioCtx = null;
+  function beep(freq, dur, delay){
+    if (!soundOn) return;
+    try{
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const t0 = audioCtx.currentTime + (delay || 0);
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.25, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.02);
+    }catch(e){}
+  }
+  function cueTransition(type){
+    if (type === 'work') { beep(880, 0.18); beep(1180, 0.18, 0.2); }
+    else if (type === 'rest') { beep(520, 0.22); }
+    else if (type === 'done') { beep(660, 0.15); beep(880, 0.15, 0.18); beep(1100, 0.22, 0.36); }
+    else { beep(660, 0.15); }
+  }
+  function cueCountdown(){ beep(700, 0.08); }
+
+  // --- Metronome (custom bpm, plays only during work phase, counts actual beats) ---
+  let metronomeOn = false;
+  let metronomeIntervalId = null;
+  let beatCount = 0;
+  let beatCountStepIndex = -1;
+  let sessionBeatTotal = 0;
+  let beatHistory = loadBeatHistory(); // { round, beats, durationSec } for completed work intervals, persisted across sessions
+  const bpmInputEl = document.getElementById('bpmInput');
+  const beatCounterEl = document.getElementById('beatCounter');
+  const beatHistoryEl = document.getElementById('beatHistory');
+  const strideInputEl = document.getElementById('strideInput');
+  const estSpeedLabelEl = document.getElementById('estSpeedLabel');
+  const clearHistoryRowEl = document.getElementById('clearHistoryRow');
+  const clearHistoryBtnEl = document.getElementById('clearHistoryBtn');
+  const BEAT_HISTORY_KEY = 'intervalClock_beatHistory';
+
+  function loadBeatHistory(){
+    try{
+      const raw = localStorage.getItem('intervalClock_beatHistory');
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+
+  function saveBeatHistory(){
+    try{
+      localStorage.setItem(BEAT_HISTORY_KEY, JSON.stringify(beatHistory));
+    }catch(e){ /* storage unavailable — history just won't persist */ }
+  }
+
+  function getStride(){
+    return Math.max(0.1, Math.min(3, parseFloat(strideInputEl.value) || 1.0));
+  }
+
+  function updateEstSpeed(){
+    // Live estimate assumes you're matching your steps to the set BPM
+    const bpm = getBpm();
+    const stride = getStride();
+    const speedKmh = (bpm * stride * 60) / 1000; // beats/min * m/beat = m/min -> km/h
+    estSpeedLabelEl.textContent = 'Est. speed at this bpm: ' + speedKmh.toFixed(1) + ' km/h (' + (speedKmh * 0.621371).toFixed(1) + ' mph)';
+  }
+
+  function getBpm(){
+    const step = schedule[stepIndex];
+    if (customModeOn && step && step.type === 'work' && typeof step.bpm === 'number'){
+      return Math.max(20, Math.min(300, step.bpm));
+    }
+    return Math.max(20, Math.min(300, parseInt(bpmInputEl.value) || 100));
+  }
+
+  function metronomeClick(){
+    // independent of the "Sound cues" toggle — this has its own on/off switch
+    try{
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const t0 = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.06);
+    }catch(e){}
+  }
+
+  function metronomeTick(){
+    metronomeClick();
+    beatCount++;
+    updateBeatCounter();
+  }
+
+  function updateBeatCounter(){
+    if (metronomeOn){
+      beatCounterEl.textContent = 'Beats this round: ' + beatCount + (metronomeIntervalId ? '' : ' (paused)');
+    } else {
+      beatCounterEl.textContent = '';
+    }
+  }
+
+  function renderBeatHistory(){
+    saveBeatHistory();
+    clearHistoryRowEl.style.display = beatHistory.length ? 'block' : 'none';
+    if (!beatHistory.length){
+      beatHistoryEl.textContent = '';
+      return;
+    }
+    beatHistoryEl.innerHTML = beatHistory.map(h => {
+      const distM = h.beats * getStride();
+      const speedKmh = h.durationSec > 0 ? (distM / h.durationSec) * 3.6 : 0;
+      return 'R' + h.round + ': ' + h.beats + ' beats · ' + distM.toFixed(0) + 'm · ' + speedKmh.toFixed(1) + ' km/h';
+    }).join('<br>');
+  }
+
+  function startMetronome(){
+    if (metronomeIntervalId) return;
+    if (beatCountStepIndex !== stepIndex){
+      beatCount = 0;
+      beatCountStepIndex = stepIndex;
+    }
+    metronomeTick();
+    metronomeIntervalId = setInterval(metronomeTick, 60000 / getBpm());
+  }
+
+  function stopMetronome(){
+    if (metronomeIntervalId){
+      clearInterval(metronomeIntervalId);
+      metronomeIntervalId = null;
+    }
+    updateBeatCounter();
+  }
+
+  function restartMetronomeIfActive(){
+    if (metronomeIntervalId){
+      clearInterval(metronomeIntervalId);
+      metronomeIntervalId = setInterval(metronomeTick, 60000 / getBpm());
+    }
+  }
+
+  function syncMetronome(){
+    const currentStep = schedule[stepIndex];
+    const shouldPlay = metronomeOn && (!running || (currentStep && currentStep.type === 'work'));
+    if (shouldPlay) startMetronome(); else stopMetronome();
+  }
+
+  // --- Timer loop ---
+  function tick(now){
+    if (!running) return;
+    if (lastTick == null) lastTick = now;
+    const dt = now - lastTick;
+    lastTick = now;
+
+    remaining -= dt;
+    totalElapsed += dt;
+
+    const step = schedule[stepIndex];
+    if (step.type !== 'done'){
+      const secLeft = remaining / 1000;
+      els.timeDisplay.textContent = fmt(secLeft);
+      const frac = 1 - Math.max(0, remaining) / (step.duration * 1000);
+      els.ring.style.strokeDashoffset = CIRC * frac;
+
+      if (secLeft <= 3.05 && secLeft > 2.0 && !step._c3){ step._c3 = true; cueCountdown(); }
+      if (secLeft <= 2.05 && secLeft > 1.0 && !step._c2){ step._c2 = true; cueCountdown(); }
+      if (secLeft <= 1.05 && secLeft > 0.0 && !step._c1){ step._c1 = true; cueCountdown(); }
+    }
+    updateTotalLabel();
+
+    if (remaining <= 0){
+      advanceStep();
+    }
+
+    if (running) rafId = requestAnimationFrame(tick);
+  }
+
+  function advanceStep(){
+    const finishedStep = schedule[stepIndex];
+    if (finishedStep && finishedStep.type === 'work' && metronomeIntervalId){
+      beatHistory.push({ round: finishedStep.round, beats: beatCount, durationSec: finishedStep.duration });
+      sessionBeatTotal += beatCount;
+      renderBeatHistory();
+    }
+    stepIndex++;
+    if (stepIndex >= schedule.length){
+      finish();
+      return;
+    }
+    const step = schedule[stepIndex];
+    remaining = step.duration * 1000;
+    renderStep();
+    cueTransition(step.type);
+    stopMetronome(); // force a fresh restart so a per-step custom bpm always takes effect
+    syncMetronome();
+    if (step.type === 'done'){
+      finish();
+    }
+  }
+
+  // --- Wake lock + auto-dim (keeps screen on but dims it to save battery) ---
+  let wakeLock = null;
+  let dimTimer = null;
+  const DIM_DELAY_MS = 8000;
+  const dimHint = document.getElementById('dimHint');
+  const wakeStatusEls = [document.getElementById('wakeStatus1'), document.getElementById('wakeStatus2')];
+
+  function setWakeStatus(text, cls){
+    wakeStatusEls.forEach(el => {
+      if (!el) return;
+      el.textContent = text;
+      el.classList.remove('active', 'failed');
+      if (cls) el.classList.add(cls);
+    });
+  }
+
+  async function acquireWakeLock(){
+    if (!('wakeLock' in navigator)){
+      setWakeStatus('Screen stay-awake: not supported by this browser', 'failed');
+      return;
+    }
+    try{
+      wakeLock = await navigator.wakeLock.request('screen');
+      setWakeStatus('Screen stay-awake: active', 'active');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+        if (isActive()) setWakeStatus('Screen stay-awake: released by system', 'failed');
+      });
+    }catch(e){
+      setWakeStatus('Screen stay-awake: failed (' + (e.name || 'error') + ')', 'failed');
+    }
+  }
+
+  function releaseWakeLockIfIdle(){
+    if (!running && !tracking && wakeLock){
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+  }
+
+  function isActive(){ return running || tracking; }
+
+  function wake(){
+    document.body.classList.remove('dimmed');
+    dimHint.classList.remove('show');
+    clearTimeout(dimTimer);
+    if (isActive()){
+      dimTimer = setTimeout(() => {
+        if (isActive()){
+          document.body.classList.add('dimmed');
+          dimHint.classList.add('show');
+        }
+      }, DIM_DELAY_MS);
+    }
+  }
+
+  ['touchstart','mousedown','keydown'].forEach(evt => {
+    document.addEventListener(evt, wake, { passive: true });
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && isActive()) acquireWakeLock();
+  });
+
+  function startActiveMode(){
+    acquireWakeLock();
+    wake();
+  }
+
+  function stopActiveModeIfIdle(){
+    releaseWakeLockIfIdle();
+    if (!isActive()){
+      document.body.classList.remove('dimmed');
+      dimHint.classList.remove('show');
+      clearTimeout(dimTimer);
+      setWakeStatus('');
+    }
+  }
+
+  function finish(){
+    running = false;
+    els.liveDot.classList.remove('live');
+    els.startPause.textContent = 'Start';
+    els.phaseLabel.textContent = 'DONE';
+    els.phaseLabel.style.color = COLORS.done;
+    els.ring.setAttribute('stroke', COLORS.done);
+    els.ring.style.strokeDashoffset = 0;
+    els.roundLabel.textContent = 'Session complete';
+    els.nextUp.textContent = '';
+    els.timeDisplay.textContent = '00:00';
+    totalElapsed = totalDuration;
+    updateTotalLabel();
+    cueTransition('done');
+    cancelAnimationFrame(rafId);
+    stopMetronome();
+    stopActiveModeIfIdle();
+
+    if (customModeOn && sessionBeatTotal > 0){
+      const promptEl = document.getElementById('sessionPrompt');
+      document.getElementById('sessionBeatsLabel').textContent = 'You logged ' + sessionBeatTotal + ' beats across this session';
+      document.getElementById('sessionDistanceInput').value = '';
+      document.getElementById('sessionResult').textContent = '';
+      promptEl.style.display = 'block';
+    }
+  }
+
+  function startTimer(){
+    if (schedule.length === 0 || stepIndex >= schedule.length){
+      resetTimer(true);
+    }
+    running = true;
+    lastTick = null;
+    els.liveDot.classList.add('live');
+    els.startPause.textContent = 'Pause';
+    rafId = requestAnimationFrame(tick);
+    startActiveMode();
+    metronomeOn = true;
+    document.getElementById('metronomeToggle').classList.add('on');
+    syncMetronome();
+  }
+
+  function pauseTimer(){
+    running = false;
+    els.liveDot.classList.remove('live');
+    els.startPause.textContent = 'Resume';
+    cancelAnimationFrame(rafId);
+    stopMetronome();
+    stopActiveModeIfIdle();
+  }
+
+  function resetTimer(silent){
+    running = false;
+    cancelAnimationFrame(rafId);
+    stopMetronome();
+    beatCount = 0;
+    beatCountStepIndex = -1;
+    updateBeatCounter();
+    sessionBeatTotal = 0;
+    document.getElementById('sessionPrompt').style.display = 'none';
+    els.liveDot.classList.remove('live');
+    els.startPause.textContent = 'Start';
+    schedule = buildSchedule();
+    schedule.forEach(s => { s._c1 = s._c2 = s._c3 = false; });
+    stepIndex = 0;
+    totalElapsed = 0;
+    totalDuration = totalOf(schedule);
+    remaining = schedule[0].duration * 1000;
+    els.ring.style.strokeDashoffset = 0;
+    renderStep();
+    if (schedule[0].type !== 'done'){
+      els.timeDisplay.textContent = fmt(schedule[0].duration);
+    }
+    updateTotalLabel();
+  }
+
+  els.startPause.addEventListener('click', () => {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (!schedule.length) resetTimer(true);
+    if (running) pauseTimer(); else startTimer();
+  });
+
+  els.reset.addEventListener('click', () => resetTimer());
+
+  document.querySelectorAll('.stepper button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target;
+      const isFloat = target === 'stride';
+      const step = isFloat ? parseFloat(btn.dataset.step) : parseInt(btn.dataset.step);
+      const map = { work: els.workInput, rest: els.restInput, rounds: els.roundsInput, warmup: els.warmupInput, bpm: bpmInputEl, stride: strideInputEl };
+      const input = map[target];
+      if (!input) return;
+      const min = isFloat ? parseFloat(input.min) || 0 : parseInt(input.min) || 0;
+      const max = input.max ? (isFloat ? parseFloat(input.max) : parseInt(input.max)) : Infinity;
+      let val = (isFloat ? parseFloat(input.value) || 0 : parseInt(input.value) || 0) + step;
+      if (isFloat) val = Math.round(val * 10) / 10; // avoid float drift
+      if (val < min) val = min;
+      if (val > max) val = max;
+      input.value = isFloat ? val.toFixed(1) : val;
+      const timerTargets = ['work', 'rest', 'rounds', 'warmup'];
+      if (timerTargets.includes(target) && !running) resetTimer();
+      if (target === 'bpm') restartMetronomeIfActive();
+      if (target === 'stride') updateEstSpeed();
+    });
+  });
+
+  [els.workInput, els.restInput, els.roundsInput, els.warmupInput].forEach(inp => {
+    inp.addEventListener('change', () => { if (!running) resetTimer(); });
+  });
+
+  bpmInputEl.addEventListener('change', () => { restartMetronomeIfActive(); updateEstSpeed(); });
+  strideInputEl.addEventListener('change', () => { updateEstSpeed(); });
+
+  clearHistoryBtnEl.addEventListener('click', () => {
+    beatHistory = [];
+    renderBeatHistory();
+  });
+
+  // --- Custom intervals (per-interval duration + bpm) ---
+  const customModeToggleEl = document.getElementById('customModeToggle');
+  const simpleConfigWrapEl = document.getElementById('simpleConfigWrap');
+  const customConfigWrapEl = document.getElementById('customConfigWrap');
+  const customIntervalListEl = document.getElementById('customIntervalList');
+  const newIntervalDurationEl = document.getElementById('newIntervalDuration');
+  const newIntervalBpmEl = document.getElementById('newIntervalBpm');
+  const addIntervalBtnEl = document.getElementById('addIntervalBtn');
+
+  function renderCustomIntervalList(){
+    if (!customIntervals.length){
+      customIntervalListEl.innerHTML = '<div class="cue-points">No custom intervals yet — add one below</div>';
+      return;
+    }
+    customIntervalListEl.innerHTML = customIntervals.map((ci, i) =>
+      '<div class="custom-interval-row">' +
+        '<span class="label">' + (i + 1) + '. ' + ci.duration + 's @ ' + ci.bpm + ' bpm</span>' +
+        '<button class="remove-btn" data-idx="' + i + '">✕</button>' +
+      '</div>'
+    ).join('');
+
+    customIntervalListEl.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        customIntervals.splice(parseInt(btn.dataset.idx), 1);
+        renderCustomIntervalList();
+        if (!running) resetTimer();
+      });
+    });
+  }
+
+  customModeToggleEl.addEventListener('click', function(){
+    customModeOn = !customModeOn;
+    this.classList.toggle('on', customModeOn);
+    simpleConfigWrapEl.style.display = customModeOn ? 'none' : 'block';
+    customConfigWrapEl.style.display = customModeOn ? 'block' : 'none';
+    if (!running) resetTimer();
+  });
+
+  addIntervalBtnEl.addEventListener('click', () => {
+    const duration = Math.max(1, parseInt(newIntervalDurationEl.value) || 30);
+    const bpm = Math.max(20, Math.min(300, parseInt(newIntervalBpmEl.value) || 100));
+    customIntervals.push({ duration, bpm });
+    renderCustomIntervalList();
+    if (!running) resetTimer();
+  });
+
+  renderCustomIntervalList();
+
+  // --- Session-end distance prompt ---
+  document.getElementById('sessionCalcBtn').addEventListener('click', () => {
+    const distance = parseFloat(document.getElementById('sessionDistanceInput').value);
+    const resultEl = document.getElementById('sessionResult');
+    if (!distance || distance <= 0){
+      resultEl.textContent = 'Enter a distance first';
+      return;
+    }
+    const stride = distance / sessionBeatTotal;
+    strideInputEl.value = Math.max(0.1, Math.min(3, stride)).toFixed(1);
+    updateEstSpeed();
+    renderBeatHistory();
+    resultEl.textContent = 'Stride length set to ' + stride.toFixed(2) + ' m per beat';
+  });
+
+  document.getElementById('sessionSkipBtn').addEventListener('click', () => {
+    document.getElementById('sessionPrompt').style.display = 'none';
+  });
+
+  // --- Stride length calculator (beats + distance -> stride length) ---
+  const calcBeatsEl = document.getElementById('calcBeats');
+  const calcDistanceEl = document.getElementById('calcDistance');
+  const calcResultEl = document.getElementById('calcResult');
+  const calcApplyRowEl = document.getElementById('calcApplyRow');
+  const calcApplyBtnEl = document.getElementById('calcApplyBtn');
+
+  let calculatedStride = null;
+
+  // --- Stride length visual gauge ---
+  const strideChartWrapEl = document.getElementById('strideChartWrap');
+  const strideMarkerEl = document.getElementById('strideMarker');
+  const strideMarkerLabelEl = document.getElementById('strideMarkerLabel');
+  const strideMarkerHitAreaEl = document.getElementById('strideMarkerHitArea');
+  const strideSvgEl = document.querySelector('.stride-chart');
+  const CHART_X_MIN = 20, CHART_X_MAX = 280, CHART_M_MAX = 2.0; // chart spans 0–2m
+  const WALK_STRIDE = 0.75, RUN_STRIDE = 1.4; // typical reference points
+
+  function strideToX(m){
+    const clamped = Math.max(0, Math.min(CHART_M_MAX, m));
+    return CHART_X_MIN + (clamped / CHART_M_MAX) * (CHART_X_MAX - CHART_X_MIN);
+  }
+
+  function initStrideChartTicks(){
+    const walkX = strideToX(WALK_STRIDE);
+    const runX = strideToX(RUN_STRIDE);
+    document.getElementById('tickWalk').setAttribute('x1', walkX);
+    document.getElementById('tickWalk').setAttribute('x2', walkX);
+    document.getElementById('tickRun').setAttribute('x1', runX);
+    document.getElementById('tickRun').setAttribute('x2', runX);
+    document.getElementById('tickWalkLabel').setAttribute('x', walkX);
+    document.getElementById('tickRunLabel').setAttribute('x', runX);
+  }
+  initStrideChartTicks();
+
+  const footprintsGroupEl = document.getElementById('footprintsGroup');
+  const FOOT_Y = 35; // matches the track line's y position
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function makeFootprintNode(x, y, isLeft){
+    const flip = isLeft ? -1 : 1;
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', 'footprint');
+    g.setAttribute('transform', 'translate(' + x + ',' + y + ') rotate(90) scale(' + flip + ',1)');
+    g.setAttribute('fill', 'var(--speed)');
+
+    const pad = document.createElementNS(SVG_NS, 'ellipse');
+    pad.setAttribute('cx', '0');
+    pad.setAttribute('cy', '0');
+    pad.setAttribute('rx', '3.1');
+    pad.setAttribute('ry', '5.2');
+    g.appendChild(pad);
+
+    const toes = [[-3.6, -4.4], [-1.6, -5.4], [0.6, -5.7], [2.7, -5.1]];
+    toes.forEach(([tx, ty]) => {
+      const c = document.createElementNS(SVG_NS, 'circle');
+      c.setAttribute('cx', tx);
+      c.setAttribute('cy', ty);
+      c.setAttribute('r', '0.9');
+      g.appendChild(c);
+    });
+
+    return g;
+  }
+
+  function makeStrideArc(x1, y1, x2, y2){
+    const midX = (x1 + x2) / 2;
+    const arcHeight = 18;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' Q ' + midX + ' ' + (Math.min(y1, y2) - arcHeight) + ' ' + x2 + ' ' + y2);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'var(--speed)');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-dasharray', '3,3');
+    path.setAttribute('opacity', '0.55');
+    return path;
+  }
+
+  function renderFootprints(xEnd){
+    while (footprintsGroupEl.firstChild){
+      footprintsGroupEl.removeChild(footprintsGroupEl.firstChild);
+    }
+    const span = xEnd - CHART_X_MIN;
+    if (span < 4) return;
+
+    const x1 = CHART_X_MIN, y1 = FOOT_Y + 5; // back foot
+    const x2 = xEnd, y2 = FOOT_Y - 5;        // front foot (landing spot)
+
+    footprintsGroupEl.appendChild(makeStrideArc(x1, y1, x2, y2));
+    footprintsGroupEl.appendChild(makeFootprintNode(x1, y1, true));
+    footprintsGroupEl.appendChild(makeFootprintNode(x2, y2, false));
+  }
+
+  function updateStrideChart(strideM){
+    const x = strideToX(strideM);
+    strideMarkerEl.setAttribute('cx', x);
+    strideMarkerHitAreaEl.setAttribute('cx', x);
+    strideMarkerLabelEl.setAttribute('x', x);
+    strideMarkerLabelEl.textContent = strideM.toFixed(2) + 'm';
+    renderFootprints(x);
+  }
+
+  function runCalculator(){
+    const beats = parseFloat(calcBeatsEl.value);
+    const distance = parseFloat(calcDistanceEl.value);
+
+    if (!beats || beats <= 0 || !distance || distance <= 0){
+      calcResultEl.textContent = 'Enter beats and distance to work out your stride length';
+      calcApplyRowEl.style.display = 'none';
+      strideChartWrapEl.style.display = 'none';
+      calculatedStride = null;
+      return;
+    }
+
+    calculatedStride = distance / beats;
+    calcResultEl.textContent = 'Stride length: ' + calculatedStride.toFixed(2) + ' m per beat';
+    calcApplyRowEl.style.display = 'block';
+    strideChartWrapEl.style.display = 'block';
+    updateStrideChart(calculatedStride);
+  }
+
+  // --- Drag the dot to manually set stride length, beats, and distance ---
+  function xToStride(x){
+    const clamped = Math.max(CHART_X_MIN, Math.min(CHART_X_MAX, x));
+    return ((clamped - CHART_X_MIN) / (CHART_X_MAX - CHART_X_MIN)) * CHART_M_MAX;
+  }
+
+  function svgPointFromEvent(evt){
+    if (!strideSvgEl.createSVGPoint) return null;
+    const pt = strideSvgEl.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    const ctm = strideSvgEl.getScreenCTM();
+    if (!ctm) return null;
+    return pt.matrixTransform(ctm.inverse());
+  }
+
+  let isDraggingStride = false;
+
+  function applyDragStride(strideM){
+    // keep beats fixed (default to 100 if not yet set), recompute distance to match the new stride
+    let beats = parseFloat(calcBeatsEl.value);
+    if (!beats || beats <= 0){
+      beats = 100;
+      calcBeatsEl.value = beats;
+    }
+    const distance = beats * strideM;
+    calcDistanceEl.value = distance.toFixed(1);
+    calculatedStride = strideM;
+    calcResultEl.textContent = 'Stride length: ' + strideM.toFixed(2) + ' m per beat';
+    calcApplyRowEl.style.display = 'block';
+    strideChartWrapEl.style.display = 'block';
+    updateStrideChart(strideM);
+  }
+
+  strideMarkerHitAreaEl.addEventListener('pointerdown', (evt) => {
+    isDraggingStride = true;
+    strideMarkerHitAreaEl.setPointerCapture(evt.pointerId);
+    strideMarkerHitAreaEl.style.cursor = 'grabbing';
+    strideSvgEl.classList.add('dragging');
+    evt.preventDefault();
+  });
+
+  strideMarkerHitAreaEl.addEventListener('pointermove', (evt) => {
+    if (!isDraggingStride) return;
+    const pt = svgPointFromEvent(evt);
+    if (!pt) return;
+    applyDragStride(xToStride(pt.x));
+    evt.preventDefault();
+  });
+
+  ['pointerup', 'pointercancel'].forEach(evtName => {
+    strideMarkerHitAreaEl.addEventListener(evtName, () => {
+      isDraggingStride = false;
+      strideMarkerHitAreaEl.style.cursor = 'grab';
+      strideSvgEl.classList.remove('dragging');
+    });
+  });
+
+  [calcBeatsEl, calcDistanceEl].forEach(el => {
+    el.addEventListener('input', runCalculator);
+  });
+
+  calcApplyBtnEl.addEventListener('click', () => {
+    if (calculatedStride === null) return;
+    strideInputEl.value = Math.max(0.1, Math.min(3, calculatedStride)).toFixed(1);
+    updateEstSpeed();
+    renderBeatHistory();
+  });
+
+  els.soundToggle.addEventListener('click', () => {
+    soundOn = !soundOn;
+    els.soundToggle.classList.toggle('on', soundOn);
+  });
+
+  document.getElementById('metronomeToggle').addEventListener('click', function(){
+    metronomeOn = !metronomeOn;
+    this.classList.toggle('on', metronomeOn);
+    syncMetronome();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space'){
+      e.preventDefault();
+      els.startPause.click();
+    } else if (e.key === 'r' || e.key === 'R'){
+      resetTimer();
+    }
+  });
+
+  resetTimer();
+  updateEstSpeed();
+  renderBeatHistory();
+  runCalculator();
+
+  // --- Tab switching ---
+  const tabTimer = document.getElementById('tabTimer');
+  const tabSpeed = document.getElementById('tabSpeed');
+  const timerView = document.getElementById('timerView');
+  const speedView = document.getElementById('speedView');
+
+  function showView(name){
+    const isTimer = name === 'timer';
+    tabTimer.classList.toggle('active', isTimer);
+    tabSpeed.classList.toggle('active', !isTimer);
+    timerView.classList.toggle('active', isTimer);
+    speedView.classList.toggle('active', !isTimer);
+  }
+  tabTimer.addEventListener('click', () => showView('timer'));
+  tabSpeed.addEventListener('click', () => showView('speed'));
+
+  // --- GPS Speedometer ---
+  const sp = {
+    status: document.getElementById('speedStatus'),
+    big: document.getElementById('speedBig'),
+    unitLabel: document.getElementById('speedUnitLabel'),
+    maxVal: document.getElementById('maxSpeedVal'),
+    avgVal: document.getElementById('avgSpeedVal'),
+    accuracyVal: document.getElementById('accuracyVal'),
+    toggleBtn: document.getElementById('speedToggleBtn'),
+    unitToggle: document.getElementById('unitToggle'),
+    mphLabel: document.getElementById('mphLabel'),
+    kmhLabel: document.getElementById('kmhLabel'),
+    voiceToggle: document.getElementById('voiceToggle'),
+    headingArrow: document.getElementById('headingArrow'),
+    headingVal: document.getElementById('headingVal'),
+    headingVoiceToggle: document.getElementById('headingVoiceToggle'),
+    distanceVal: document.getElementById('distanceVal'),
+    distanceVoiceToggle: document.getElementById('distanceVoiceToggle'),
+  };
+
+  let totalDistanceM = 0;
+  let lastAnnouncedSegment = 0; // in units of 500m
+  let distanceVoiceOn = false;
+
+  let voiceOn = false;
+  const CUE_POINTS_KMH = Array.from({ length: 15 }, (_, i) => i + 1); // 1..15
+  // track whether current speed is above each cue point, in km/h terms (fixed regardless of display unit)
+  let cueState = CUE_POINTS_KMH.map(() => false);
+
+  let headingVoiceOn = false;
+  let lastDegreeBucket = null;
+  const CARDINALS = ['N','NE','E','SE','S','SW','W','NW'];
+  const CARDINAL_NAMES = ['north','northeast','east','southeast','south','southwest','west','northwest'];
+
+  function degToCardinalIndex(deg){
+    return Math.round(((deg % 360) + 360) % 360 / 45) % 8;
+  }
+
+  let watchId = null;
+  let tracking = false;
+  let useKmh = true;
+  let maxSpeedMs = 0;
+  let lastPos = null;       // {lat, lon, t} fallback for devices without coords.speed
+  let speedSamples = [];    // for average (in m/s)
+  let currentSpeedMs = 0;
+
+  function metersPerSecTo(unitKmh, ms){
+    return unitKmh ? ms * 3.6 : ms * 2.23694;
+  }
+
+  // --- Voice selection ---
+  let selectedVoice = null;
+  const voiceSelectEl = document.getElementById('voiceSelect');
+
+  function populateVoices(){
+    if (!('speechSynthesis' in window)) return;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return;
+
+    // Prefer English voices first, but list all available
+    const sorted = [...voices].sort((a, b) => {
+      const aEn = a.lang.toLowerCase().startsWith('en') ? 0 : 1;
+      const bEn = b.lang.toLowerCase().startsWith('en') ? 0 : 1;
+      if (aEn !== bEn) return aEn - bEn;
+      return a.name.localeCompare(b.name);
+    });
+
+    voiceSelectEl.innerHTML = '';
+    sorted.forEach((v, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = v.name + ' (' + v.lang + ')';
+      voiceSelectEl.appendChild(opt);
+    });
+
+    // Default to first English voice if none chosen yet
+    if (!selectedVoice){
+      selectedVoice = sorted[0];
+      voiceSelectEl.value = 0;
+    }
+    window._sortedVoices = sorted;
+  }
+
+  if ('speechSynthesis' in window){
+    populateVoices();
+    window.speechSynthesis.onvoiceschanged = populateVoices;
+  }
+
+  voiceSelectEl.addEventListener('change', () => {
+    const idx = parseInt(voiceSelectEl.value);
+    if (window._sortedVoices && window._sortedVoices[idx]){
+      selectedVoice = window._sortedVoices[idx];
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      speak('Voice set');
+    }
+  });
+
+  function speak(text){
+    try{
+      if (!('speechSynthesis' in window)) return;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 1.0;
+      utter.volume = 1.0;
+      if (selectedVoice){
+        utter.voice = selectedVoice;
+        utter.lang = selectedVoice.lang; // required on Android or it silently falls back to default
+      }
+      window.speechSynthesis.speak(utter);
+    }catch(e){}
+  }
+
+  function checkVoiceThreshold(){
+    if (!voiceOn) return;
+    const currentKmh = currentSpeedMs * 3.6; // fixed unit for cue points regardless of display unit
+
+    CUE_POINTS_KMH.forEach((point, i) => {
+      const isAbove = currentKmh >= point;
+      if (isAbove !== cueState[i]){
+        speak(point + ' kilometers per hour');
+        cueState[i] = isAbove;
+      }
+    });
+  }
+
+  function refreshSpeedDisplay(){
+    const disp = metersPerSecTo(useKmh, currentSpeedMs);
+    sp.big.textContent = disp.toFixed(1);
+    sp.unitLabel.textContent = useKmh ? 'km/h' : 'mph';
+    sp.maxVal.textContent = metersPerSecTo(useKmh, maxSpeedMs).toFixed(1);
+    const avg = speedSamples.length
+      ? speedSamples.reduce((a,b) => a+b, 0) / speedSamples.length
+      : 0;
+    sp.avgVal.textContent = metersPerSecTo(useKmh, avg).toFixed(1);
+    checkVoiceThreshold();
+  }
+
+  function haversineMeters(lat1, lon1, lat2, lon2){
+    const R = 6371000;
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function onPosition(pos){
+    const c = pos.coords;
+    let speedMs = null;
+
+    if (typeof c.speed === 'number' && c.speed !== null && !isNaN(c.speed)){
+      speedMs = c.speed;
+    } else if (lastPos){
+      const dt = (pos.timestamp - lastPos.t) / 1000;
+      if (dt > 0.3){
+        const dist = haversineMeters(lastPos.lat, lastPos.lon, c.latitude, c.longitude);
+        speedMs = dist / dt;
+      }
+    }
+    if (lastPos){
+      const dtDist = (pos.timestamp - lastPos.t) / 1000;
+      const distDelta = haversineMeters(lastPos.lat, lastPos.lon, c.latitude, c.longitude);
+      // ignore GPS jitter (<2m) and implausible jumps (bad fix)
+      if (dtDist > 0 && distDelta > 2 && (distDelta / dtDist) < 55){
+        totalDistanceM += distDelta;
+      }
+    }
+    lastPos = { lat: c.latitude, lon: c.longitude, t: pos.timestamp };
+
+    if (speedMs !== null && speedMs >= 0 && speedMs < 120){ // sanity cap ~430km/h
+      currentSpeedMs = speedMs;
+      if (speedMs > maxSpeedMs) maxSpeedMs = speedMs;
+      speedSamples.push(speedMs);
+      if (speedSamples.length > 600) speedSamples.shift();
+    }
+
+    sp.status.textContent = 'Tracking · live signal';
+    sp.status.classList.add('tracking');
+    sp.status.classList.remove('error');
+    sp.accuracyVal.textContent = c.accuracy ? Math.round(c.accuracy) + 'm' : '—';
+
+    updateHeading(c.heading);
+    updateDistance();
+
+    refreshSpeedDisplay();
+  }
+
+  function distanceCueLabel(meters){
+    if (meters < 1000) return meters + ' meters';
+    const km = meters / 1000;
+    if (Number.isInteger(km)) return km + (km === 1 ? ' kilometer' : ' kilometers');
+    return km + ' kilometers'; // e.g. "1.5 kilometers"
+  }
+
+  function updateDistance(){
+    const km = totalDistanceM / 1000;
+    sp.distanceVal.textContent = km.toFixed(2) + ' km';
+
+    if (distanceVoiceOn){
+      const segment = Math.floor(totalDistanceM / 500);
+      if (segment > lastAnnouncedSegment){
+        lastAnnouncedSegment = segment;
+        speak(distanceCueLabel(segment * 500));
+      }
+    }
+  }
+
+  function updateHeading(heading){
+    const hasHeading = typeof heading === 'number' && !isNaN(heading) && currentSpeedMs > 0.4; // GPS heading unreliable near-stationary
+    if (!hasHeading){
+      sp.headingVal.textContent = 'Heading —';
+      return;
+    }
+    const idx = degToCardinalIndex(heading);
+    sp.headingVal.textContent = 'Heading ' + CARDINALS[idx] + ' · ' + Math.round(heading) + '°';
+    sp.headingArrow.style.transform = 'rotate(' + Math.round(heading) + 'deg)';
+
+    if (headingVoiceOn){
+      const DEGREE_STEP = 15; // bucket to nearest 15° so GPS jitter doesn't cause constant chatter
+      const norm = ((heading % 360) + 360) % 360;
+      const bucket = Math.round(norm / DEGREE_STEP) * DEGREE_STEP % 360;
+      if (lastDegreeBucket === null){
+        lastDegreeBucket = bucket;
+      } else if (bucket !== lastDegreeBucket){
+        speak(bucket + ' degrees');
+        lastDegreeBucket = bucket;
+      }
+    }
+  }
+
+  function onPositionError(err){
+    tracking = false;
+    sp.status.textContent = 'GPS error: ' + (err.message || 'permission denied');
+    sp.status.classList.add('error');
+    sp.status.classList.remove('tracking');
+    sp.toggleBtn.textContent = 'Start Tracking';
+    sp.toggleBtn.classList.remove('stop');
+    if (watchId !== null){
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    stopActiveModeIfIdle();
+  }
+
+  function startTracking(){
+    if (!('geolocation' in navigator)){
+      sp.status.textContent = 'Geolocation not supported on this device';
+      sp.status.classList.add('error');
+      return;
+    }
+    tracking = true;
+    maxSpeedMs = 0;
+    speedSamples = [];
+    currentSpeedMs = 0;
+    lastPos = null;
+    cueState = CUE_POINTS_KMH.map(() => false);
+    lastDegreeBucket = null;
+    sp.headingVal.textContent = 'Heading —';
+    totalDistanceM = 0;
+    lastAnnouncedSegment = 0;
+    sp.distanceVal.textContent = '0.00 km';
+    sp.status.textContent = 'Requesting location access…';
+    sp.status.classList.remove('error');
+    sp.toggleBtn.textContent = 'Stop Tracking';
+    sp.toggleBtn.classList.add('stop');
+    refreshSpeedDisplay();
+
+    watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+      enableHighAccuracy: true,
+      maximumAge: 500,
+      timeout: 10000,
+    });
+    startActiveMode();
+  }
+
+  function stopTracking(){
+    tracking = false;
+    if (watchId !== null){
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    sp.status.textContent = 'GPS idle · tap start to track';
+    sp.status.classList.remove('tracking');
+    sp.status.classList.remove('error');
+    sp.toggleBtn.textContent = 'Start Tracking';
+    sp.toggleBtn.classList.remove('stop');
+    sp.accuracyVal.textContent = '—';
+    sp.headingVal.textContent = 'Heading —';
+    sp.headingArrow.style.transform = 'rotate(0deg)';
+    stopActiveModeIfIdle();
+  }
+
+  sp.toggleBtn.addEventListener('click', () => {
+    if (tracking) stopTracking(); else startTracking();
+  });
+
+  sp.unitToggle.addEventListener('click', () => {
+    useKmh = !useKmh;
+    sp.unitToggle.classList.toggle('on', useKmh);
+    sp.mphLabel.classList.toggle('on', !useKmh);
+    sp.kmhLabel.classList.toggle('on', useKmh);
+    refreshSpeedDisplay();
+  });
+
+  sp.voiceToggle.addEventListener('click', () => {
+    voiceOn = !voiceOn;
+    sp.voiceToggle.classList.toggle('on', voiceOn);
+    cueState = CUE_POINTS_KMH.map(() => false);
+    if (voiceOn && 'speechSynthesis' in window){
+      // unlock speech synthesis on user gesture for mobile browsers
+      speak('Voice cues on');
+    }
+  });
+
+  sp.headingVoiceToggle.addEventListener('click', () => {
+    headingVoiceOn = !headingVoiceOn;
+    sp.headingVoiceToggle.classList.toggle('on', headingVoiceOn);
+    lastDegreeBucket = null;
+    if (headingVoiceOn && 'speechSynthesis' in window){
+      speak('Heading cues on');
+    }
+  });
+
+  sp.distanceVoiceToggle.addEventListener('click', () => {
+    distanceVoiceOn = !distanceVoiceOn;
+    sp.distanceVoiceToggle.classList.toggle('on', distanceVoiceOn);
+    lastAnnouncedSegment = Math.floor(totalDistanceM / 500);
+    if (distanceVoiceOn && 'speechSynthesis' in window){
+      speak('Distance cues on');
+    }
+  });
+
+  // Stop GPS if tab hidden for a long time to save battery is left to the user;
+  // we keep tracking active across tab switches within the app intentionally.
+})();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+    });
+  }
+</script>
+
+<div class="dim-hint" id="dimHint">Tap anywhere to brighten</div>
+</body>
+</html>
