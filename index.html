@@ -163,6 +163,9 @@
   .stride-chart.dragging circle{
     transition: none;
   }
+  .stride-chart line#loadingFill{
+    transition: x2 0.12s linear;
+  }
   .footprint{
     fill: var(--speed);
     opacity: 0.6;
@@ -621,7 +624,7 @@
 
 <div class="app">
   <div class="eyebrow">
-    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v17</span>
+    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v18</span>
     <span id="totalLabel">00:00 TOTAL</span>
   </div>
 
@@ -779,6 +782,7 @@
         <div class="stride-chart-wrap" id="strideChartWrap" style="display:none;">
           <svg class="stride-chart" viewBox="0 0 300 70" xmlns="http://www.w3.org/2000/svg">
             <line x1="20" y1="35" x2="280" y2="35" stroke="var(--line)" stroke-width="2"></line>
+            <line id="loadingFill" x1="20" y1="35" x2="20" y2="35" stroke="var(--speed)" stroke-width="4" stroke-linecap="round" opacity="0.5"></line>
             <g id="footprintsGroup"></g>
             <line id="tickWalk" x1="0" y1="26" x2="0" y2="44" stroke="var(--dim)" stroke-width="1.5"></line>
             <line id="tickRun" x1="0" y1="26" x2="0" y2="44" stroke="var(--dim)" stroke-width="1.5"></line>
@@ -791,6 +795,19 @@
             <text id="strideMarkerLabel" x="20" y="12" font-size="10" fill="var(--speed)" text-anchor="middle" font-family="var(--mono)" font-weight="600"></text>
           </svg>
           <div class="cue-points">Drag the dot to adjust</div>
+
+          <div class="toggle-row" style="margin-top:14px;">
+            <span>Beat-synced loading fill</span>
+            <div class="switch" id="fillSyncToggle"></div>
+          </div>
+          <div class="field" id="fillRateField" style="margin-top:10px; display:none;">
+            <label>Beats per fill cycle</label>
+            <div class="stepper">
+              <button data-target="fillrate" data-step="-1">–</button>
+              <input type="number" id="fillRateInput" value="8" min="1" max="64">
+              <button data-target="fillrate" data-step="1">+</button>
+            </div>
+          </div>
         </div>
 
         <div class="calc-apply-row" id="calcApplyRow" style="display:none;">
@@ -1110,6 +1127,8 @@
     metronomeClick();
     beatCount++;
     updateBeatCounter();
+    fillBeatCounter++;
+    updateLoadingFill();
   }
 
   function updateBeatCounter(){
@@ -1150,6 +1169,7 @@
       metronomeIntervalId = null;
     }
     updateBeatCounter();
+    if (typeof resetLoadingFill === 'function') resetLoadingFill();
   }
 
   function restartMetronomeIfActive(){
@@ -1621,6 +1641,50 @@
   }
 
   let isDraggingStride = false;
+
+  // --- Beat-synced loading fill ---
+  let fillSyncOn = false;
+  let fillBeatCounter = 0;
+  const loadingFillEl = document.getElementById('loadingFill');
+  const fillSyncToggleEl = document.getElementById('fillSyncToggle');
+  const fillRateFieldEl = document.getElementById('fillRateField');
+  const fillRateInputEl = document.getElementById('fillRateInput');
+
+  function fillRateValue(){
+    return Math.max(1, Math.min(64, parseInt(fillRateInputEl.value) || 8));
+  }
+
+  function updateLoadingFill(){
+    if (!fillSyncOn) return;
+    const targetX = parseFloat(strideMarkerEl.getAttribute('cx')) || CHART_X_MIN;
+    const rate = fillRateValue();
+    const progress = ((fillBeatCounter - 1) % rate + 1) / rate;
+    const x2 = CHART_X_MIN + progress * (targetX - CHART_X_MIN);
+    loadingFillEl.setAttribute('x2', x2);
+  }
+
+  function resetLoadingFill(){
+    fillBeatCounter = 0;
+    loadingFillEl.setAttribute('x2', CHART_X_MIN);
+  }
+
+  fillSyncToggleEl.addEventListener('click', function(){
+    fillSyncOn = !fillSyncOn;
+    this.classList.toggle('on', fillSyncOn);
+    fillRateFieldEl.style.display = fillSyncOn ? 'block' : 'none';
+    resetLoadingFill();
+  });
+
+  document.querySelectorAll('.stepper button').forEach(btn => {
+    if (btn.dataset.target !== 'fillrate') return;
+    btn.addEventListener('click', () => {
+      const step = parseInt(btn.dataset.step);
+      let val = (parseInt(fillRateInputEl.value) || 8) + step;
+      val = Math.max(1, Math.min(64, val));
+      fillRateInputEl.value = val;
+      resetLoadingFill();
+    });
+  });
 
   function applyDragStride(strideM){
     // keep beats fixed (default to 100 if not yet set), recompute distance to match the new stride
