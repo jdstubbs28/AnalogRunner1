@@ -39,6 +39,8 @@
     -webkit-font-smoothing:antialiased;
     filter: brightness(1);
     transition: filter 1.2s ease;
+    overflow-x:hidden;
+    max-width:100vw;
   }
   body.dimmed{
     filter: brightness(0.32);
@@ -107,7 +109,10 @@
     text-decoration:underline;
     cursor:pointer;
     padding:4px 8px;
-    flex:none;
+    flex:0 1 auto;
+    max-width:100%;
+    white-space:normal;
+    text-align:center;
   }
   .text-btn:hover{ color: var(--ink); }
   .calc-box{
@@ -217,8 +222,9 @@
   }
   .session-prompt .clear-history-row{
     display:flex;
+    flex-wrap:wrap;
     justify-content:center;
-    gap:16px;
+    gap:10px 16px;
     margin-top:10px;
   }
   .heading-row{
@@ -269,9 +275,13 @@
   .voice-select:focus{ outline:none; border-color:#3a3f49; }
   body{
     display:flex;
-    align-items:center;
+    align-items:flex-start;
     justify-content:center;
     padding:24px;
+    padding-top:calc(24px + env(safe-area-inset-top, 0px));
+    padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px));
+    padding-left:calc(24px + env(safe-area-inset-left, 0px));
+    padding-right:calc(24px + env(safe-area-inset-right, 0px));
     min-height:100vh;
   }
   .app{
@@ -531,6 +541,7 @@
     display:flex;
     flex-direction:column;
     gap:6px;
+    min-width:0;
   }
   .field label{
     font-size:11px;
@@ -545,6 +556,7 @@
     border:1px solid var(--line);
     border-radius:10px;
     overflow:hidden;
+    min-width:0;
   }
   .stepper button{
     flex:0 0 auto;
@@ -558,6 +570,7 @@
   .stepper button:hover{ color: var(--ink); background:#1c1f26; }
   .stepper input{
     flex:1;
+    min-width:0;
     text-align:center;
     background:transparent;
     border:none;
@@ -617,6 +630,10 @@
   @media (max-width:420px){
     .ring-wrap{ width:220px; height:220px; }
     .time{ font-size:46px; }
+    body{
+      padding-left:calc(14px + env(safe-area-inset-left, 0px));
+      padding-right:calc(14px + env(safe-area-inset-right, 0px));
+    }
   }
 </style>
 </head>
@@ -624,7 +641,7 @@
 
 <div class="app">
   <div class="eyebrow">
-    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v22</span>
+    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v29</span>
     <span id="totalLabel">00:00 TOTAL</span>
   </div>
 
@@ -689,7 +706,7 @@
           <label>Rest (sec)</label>
           <div class="stepper">
             <button data-target="rest" data-step="-5">–</button>
-            <input type="number" id="restInput" value="15" min="0">
+            <input type="number" id="restInput" value="0" min="0">
             <button data-target="rest" data-step="5">+</button>
           </div>
         </div>
@@ -700,7 +717,7 @@
           <label>Rounds</label>
           <div class="stepper">
             <button data-target="rounds" data-step="-1">–</button>
-            <input type="number" id="roundsInput" value="8" min="1">
+            <input type="number" id="roundsInput" value="0" min="1">
             <button data-target="rounds" data-step="1">+</button>
           </div>
         </div>
@@ -708,7 +725,7 @@
           <label>Warm-up (sec)</label>
           <div class="stepper">
             <button data-target="warmup" data-step="-5">–</button>
-            <input type="number" id="warmupInput" value="10" min="0">
+            <input type="number" id="warmupInput" value="0" min="0">
             <button data-target="warmup" data-step="5">+</button>
           </div>
         </div>
@@ -731,6 +748,12 @@
           <button id="addIntervalBtn" class="text-btn">+ Add interval</button>
         </div>
         <div class="cue-points">Rest and Warm-up above still apply between your custom intervals</div>
+
+        <div class="toggle-row" style="margin-top:10px;">
+          <span>Voice: announce stride length</span>
+          <div class="switch" id="strideVoiceToggle"></div>
+        </div>
+        <div class="cue-points">Speaks your stride length setting at the start of each custom interval</div>
       </div>
 
       <div class="toggle-row">
@@ -778,6 +801,10 @@
           </div>
         </div>
         <div class="calc-result" id="calcResult">Enter beats and distance to work out your stride length</div>
+        <div class="calc-result" id="calcTimeResult"></div>
+        <div class="clear-history-row" id="calcAddIntervalRow" style="display:none;">
+          <button id="calcAddIntervalBtn" class="text-btn">+ Add as custom interval</button>
+        </div>
 
         <div class="stride-chart-wrap" id="strideChartWrap" style="display:none;">
           <svg class="stride-chart" viewBox="0 -16 300 86" xmlns="http://www.w3.org/2000/svg">
@@ -930,6 +957,13 @@
 
   let customModeOn = false;
   let customIntervals = []; // { duration, bpm }
+  let strideVoiceOn = false;
+
+  function announceStrideIfNeeded(step){
+    if (!strideVoiceOn || !customModeOn || !step || step.type !== 'work') return;
+    const stride = parseFloat(strideInputEl.value) || 1.0;
+    speak('Stride length ' + stride.toFixed(1) + ' meters');
+  }
 
   function buildSchedule(){
     const rest = Math.max(0, parseInt(els.restInput.value) || 0);
@@ -1233,6 +1267,7 @@
     remaining = step.duration * 1000;
     renderStep();
     cueTransition(step.type);
+    announceStrideIfNeeded(step);
     stopMetronome(); // force a fresh restart so a per-step custom bpm always takes effect
     syncMetronome();
     if (step.type === 'done'){
@@ -1359,6 +1394,12 @@
     metronomeOn = true;
     document.getElementById('metronomeToggle').classList.add('on');
     syncMetronome();
+
+    // announce for the very first interval only if it's a fresh start (not a resume mid-interval)
+    const currentStep = schedule[stepIndex];
+    if (currentStep && remaining === currentStep.duration * 1000){
+      announceStrideIfNeeded(currentStep);
+    }
   }
 
   function pauseTimer(){
@@ -1420,7 +1461,10 @@
       input.value = isFloat ? val.toFixed(1) : val;
       const timerTargets = ['work', 'rest', 'rounds', 'warmup'];
       if (timerTargets.includes(target) && !running) resetTimer();
-      if (target === 'bpm') restartMetronomeIfActive();
+      if (target === 'bpm'){
+        restartMetronomeIfActive();
+        if (calculatedStride !== null) updateTimeEstimate(parseFloat(calcBeatsEl.value));
+      }
       if (target === 'stride') updateEstSpeed();
     });
   });
@@ -1429,7 +1473,11 @@
     inp.addEventListener('change', () => { if (!running) resetTimer(); });
   });
 
-  bpmInputEl.addEventListener('change', () => { restartMetronomeIfActive(); updateEstSpeed(); });
+  bpmInputEl.addEventListener('change', () => {
+    restartMetronomeIfActive();
+    updateEstSpeed();
+    if (calculatedStride !== null) updateTimeEstimate(parseFloat(calcBeatsEl.value));
+  });
   strideInputEl.addEventListener('change', () => { updateEstSpeed(); });
 
   clearHistoryBtnEl.addEventListener('click', () => {
@@ -1473,6 +1521,14 @@
     simpleConfigWrapEl.style.display = customModeOn ? 'none' : 'block';
     customConfigWrapEl.style.display = customModeOn ? 'block' : 'none';
     if (!running) resetTimer();
+  });
+
+  document.getElementById('strideVoiceToggle').addEventListener('click', function(){
+    strideVoiceOn = !strideVoiceOn;
+    this.classList.toggle('on', strideVoiceOn);
+    if (strideVoiceOn && 'speechSynthesis' in window){
+      speak('Stride voice cues on');
+    }
   });
 
   addIntervalBtnEl.addEventListener('click', () => {
@@ -1612,12 +1668,42 @@
     renderFootprints(x);
   }
 
+  const calcTimeResultEl = document.getElementById('calcTimeResult');
+
+  function formatDuration(totalSeconds){
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = Math.round(totalSeconds % 60);
+    return mins > 0 ? (mins + 'm ' + secs + 's') : (secs + 's');
+  }
+
+  let lastCalcDurationSec = null;
+  let lastCalcBpm = null;
+  const calcAddIntervalRowEl = document.getElementById('calcAddIntervalRow');
+
+  function updateTimeEstimate(beats){
+    const bpm = getBpm();
+    if (!bpm || bpm <= 0){
+      calcTimeResultEl.textContent = '';
+      calcAddIntervalRowEl.style.display = 'none';
+      lastCalcDurationSec = null;
+      lastCalcBpm = null;
+      return;
+    }
+    const seconds = (beats / bpm) * 60;
+    calcTimeResultEl.textContent = 'At ' + bpm + ' bpm: ' + formatDuration(seconds) + ' to cover it';
+    lastCalcDurationSec = seconds;
+    lastCalcBpm = bpm;
+    calcAddIntervalRowEl.style.display = 'block';
+  }
+
   function runCalculator(){
     const beats = parseFloat(calcBeatsEl.value);
     const distance = parseFloat(calcDistanceEl.value);
 
     if (!beats || beats <= 0 || !distance || distance <= 0){
       calcResultEl.textContent = 'Enter beats and distance to work out your stride length';
+      calcTimeResultEl.textContent = '';
+      calcAddIntervalRowEl.style.display = 'none';
       calcApplyRowEl.style.display = 'none';
       strideChartWrapEl.style.display = 'none';
       calculatedStride = null;
@@ -1626,6 +1712,7 @@
 
     calculatedStride = distance / beats;
     calcResultEl.textContent = 'Stride length: ' + calculatedStride.toFixed(2) + ' m per beat';
+    updateTimeEstimate(beats);
     calcApplyRowEl.style.display = 'block';
     strideChartWrapEl.style.display = 'block';
     updateStrideChart(calculatedStride, distance);
@@ -1708,6 +1795,7 @@
     calcDistanceEl.value = distance.toFixed(1);
     calculatedStride = strideM;
     calcResultEl.textContent = 'Stride length: ' + strideM.toFixed(2) + ' m per beat';
+    updateTimeEstimate(beats);
     calcApplyRowEl.style.display = 'block';
     strideChartWrapEl.style.display = 'block';
     updateStrideChart(strideM, distance);
@@ -1749,6 +1837,28 @@
     strideInputEl.value = Math.max(0.1, Math.min(3, calculatedStride)).toFixed(1);
     updateEstSpeed();
     renderBeatHistory();
+  });
+
+  document.getElementById('calcAddIntervalBtn').addEventListener('click', () => {
+    if (lastCalcDurationSec === null || lastCalcBpm === null) return;
+    const duration = Math.max(1, Math.round(lastCalcDurationSec));
+    const bpm = Math.max(20, Math.min(300, Math.round(lastCalcBpm)));
+    customIntervals.push({ duration, bpm });
+    renderCustomIntervalList();
+
+    // switch to custom-interval mode so the added interval actually gets used
+    if (!customModeOn){
+      customModeOn = true;
+      customModeToggleEl.classList.add('on');
+      simpleConfigWrapEl.style.display = 'none';
+      customConfigWrapEl.style.display = 'block';
+    }
+    if (!running) resetTimer();
+
+    const btn = document.getElementById('calcAddIntervalBtn');
+    const original = btn.textContent;
+    btn.textContent = 'Added!';
+    setTimeout(() => { btn.textContent = original; }, 1200);
   });
 
   els.soundToggle.addEventListener('click', () => {

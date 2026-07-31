@@ -1,4 +1,4 @@
-const CACHE_NAME = 'interval-clock-v22';
+const CACHE_NAME = 'interval-clock-v29';
 const ASSETS = [
   './',
   './index.html',
