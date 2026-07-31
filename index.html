@@ -624,7 +624,7 @@
 
 <div class="app">
   <div class="eyebrow">
-    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v21</span>
+    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v22</span>
     <span id="totalLabel">00:00 TOTAL</span>
   </div>
 
@@ -1134,7 +1134,8 @@
 
   function updateBeatCounter(){
     if (metronomeOn){
-      beatCounterEl.textContent = 'Beats this round: ' + beatCount + (metronomeIntervalId ? '' : ' (paused)');
+      const bps = (getBpm() / 60).toFixed(2);
+      beatCounterEl.textContent = 'Beats this round: ' + beatCount + ' · ' + bps + '/sec' + (metronomeIntervalId ? '' : ' (paused)');
     } else {
       beatCounterEl.textContent = '';
     }
