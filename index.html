@@ -624,7 +624,7 @@
 
 <div class="app">
   <div class="eyebrow">
-    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v19</span>
+    <span><span class="dot" id="liveDot"></span>INTERVAL CLOCK v20</span>
     <span id="totalLabel">00:00 TOTAL</span>
   </div>
 
@@ -801,10 +801,10 @@
             <div class="switch" id="fillSyncToggle"></div>
           </div>
           <div class="field" id="fillRateField" style="margin-top:10px; display:none;">
-            <label>Beats per fill cycle</label>
+            <label>Beats to reach full distance (auto-set, editable)</label>
             <div class="stepper">
               <button data-target="fillrate" data-step="-1">–</button>
-              <input type="number" id="fillRateInput" value="8" min="1" max="64">
+              <input type="number" id="fillRateInput" value="8" min="1" max="5000">
               <button data-target="fillrate" data-step="1">+</button>
             </div>
           </div>
@@ -1622,6 +1622,10 @@
     calcApplyRowEl.style.display = 'block';
     strideChartWrapEl.style.display = 'block';
     updateStrideChart(calculatedStride);
+
+    // the real beat count needed to cover this distance becomes the fill target
+    fillRateInputEl.value = Math.round(beats);
+    if (fillSyncOn) resetLoadingFill();
   }
 
   // --- Drag the dot to manually set stride length, beats, and distance ---
@@ -1651,7 +1655,7 @@
   const fillRateInputEl = document.getElementById('fillRateInput');
 
   function fillRateValue(){
-    return Math.max(1, Math.min(64, parseInt(fillRateInputEl.value) || 8));
+    return Math.max(1, Math.min(5000, parseInt(fillRateInputEl.value) || 8));
   }
 
   function updateLoadingFill(){
@@ -1680,7 +1684,7 @@
     btn.addEventListener('click', () => {
       const step = parseInt(btn.dataset.step);
       let val = (parseInt(fillRateInputEl.value) || 8) + step;
-      val = Math.max(1, Math.min(64, val));
+      val = Math.max(1, Math.min(5000, val));
       fillRateInputEl.value = val;
       resetLoadingFill();
     });
@@ -1700,6 +1704,9 @@
     calcApplyRowEl.style.display = 'block';
     strideChartWrapEl.style.display = 'block';
     updateStrideChart(strideM);
+
+    fillRateInputEl.value = Math.round(beats);
+    if (fillSyncOn) resetLoadingFill();
   }
 
   strideMarkerHitAreaEl.addEventListener('pointerdown', (evt) => {
