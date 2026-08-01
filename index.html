@@ -800,12 +800,23 @@
   let customIntervals = []; // { duration, bpm }
   let strideVoiceOn = false;
 
+  // Utterances with no external reference can get garbage-collected mid-speech in
+  // some browsers (notably Chrome), silently killing the audio — so we hold onto
+  // each one until it finishes.
+  const activeUtterances = [];
   function speak(text){
     try{
       if (!('speechSynthesis' in window)) return;
       const utter = new SpeechSynthesisUtterance(text);
       utter.rate = 1.0;
       utter.volume = 1.0;
+      activeUtterances.push(utter);
+      const release = () => {
+        const idx = activeUtterances.indexOf(utter);
+        if (idx !== -1) activeUtterances.splice(idx, 1);
+      };
+      utter.onend = release;
+      utter.onerror = release;
       window.speechSynthesis.speak(utter);
     }catch(e){}
   }
