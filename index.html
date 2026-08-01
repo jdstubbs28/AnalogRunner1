@@ -1273,7 +1273,7 @@
     stopMetronome();
     stopActiveModeIfIdle();
 
-    if (customModeOn && sessionBeatTotal > 0){
+    if (sessionBeatTotal > 0){
       const promptEl = document.getElementById('sessionPrompt');
       document.getElementById('sessionBeatsLabel').textContent = 'You logged ' + sessionBeatTotal + ' beats across this session';
       document.getElementById('sessionDistanceInput').value = '';
