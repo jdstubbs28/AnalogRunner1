@@ -667,6 +667,23 @@
           <button id="testVoiceBtn" class="text-btn">🔊 Test voice</button>
         </div>
         <div class="cue-points" id="strideVoiceDebug"></div>
+
+        <div class="calc-title" style="margin-top:16px;">Route cues</div>
+        <div class="custom-interval-list" id="distanceCueList"></div>
+        <div class="field-row">
+          <div class="field">
+            <label>Distance (m)</label>
+            <input type="number" id="newCueDistance" class="plain-input" value="100" min="100" step="100">
+          </div>
+          <div class="field">
+            <label>Cue text</label>
+            <input type="text" id="newCueText" class="plain-input" placeholder="e.g. second house left">
+          </div>
+        </div>
+        <div class="clear-history-row">
+          <button id="addDistanceCueBtn" class="text-btn">+ Add route cue</button>
+        </div>
+        <div class="cue-points">Spoken instead of the generic "X meters" callout when you reach that distance</div>
       </div>
 
       <div class="toggle-row">
@@ -802,6 +819,7 @@
   let customModeOn = false;
   let customIntervals = []; // { duration, bpm }
   let strideVoiceOn = false;
+  let distanceCues = []; // { distance, text } — spoken instead of "X meters" at that distance
 
   // Utterances with no external reference can get garbage-collected mid-speech in
   // some browsers (notably Chrome), silently killing the audio — so we hold onto
@@ -1059,10 +1077,10 @@
     const step = schedule[stepIndex];
     if (!step || step.type !== 'work' || typeof step.stride !== 'number') return;
     sessionDistanceM += step.stride;
-    const milestone = Math.floor(sessionDistanceM / 100) * 100;
-    if (milestone > lastDistanceCueM){
-      lastDistanceCueM = milestone;
-      speak(milestone + ' meters');
+    while (lastDistanceCueM + 100 <= sessionDistanceM){
+      lastDistanceCueM += 100;
+      const cue = distanceCues.find(c => c.distance === lastDistanceCueM);
+      speak(cue ? cue.text : (lastDistanceCueM + ' meters'));
     }
   }
 
@@ -1427,6 +1445,45 @@
       });
     });
   }
+
+  const distanceCueListEl = document.getElementById('distanceCueList');
+  const newCueDistanceEl = document.getElementById('newCueDistance');
+  const newCueTextEl = document.getElementById('newCueText');
+
+  function renderDistanceCueList(){
+    if (!distanceCues.length){
+      distanceCueListEl.innerHTML = '<div class="cue-points">No route cues yet — add one below</div>';
+      return;
+    }
+    const sorted = distanceCues.slice().sort((a, b) => a.distance - b.distance);
+    distanceCueListEl.innerHTML = sorted.map((cue) =>
+      '<div class="custom-interval-row">' +
+        '<span class="label">' + cue.distance + 'm: ' + cue.text + '</span>' +
+        '<button class="remove-btn" data-distance="' + cue.distance + '">✕</button>' +
+      '</div>'
+    ).join('');
+
+    distanceCueListEl.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const d = parseFloat(btn.dataset.distance);
+        distanceCues = distanceCues.filter(c => c.distance !== d);
+        renderDistanceCueList();
+      });
+    });
+  }
+
+  document.getElementById('addDistanceCueBtn').addEventListener('click', () => {
+    const distance = Math.max(100, Math.round((parseFloat(newCueDistanceEl.value) || 100) / 100) * 100);
+    const text = newCueTextEl.value.trim();
+    if (!text) return;
+    distanceCues = distanceCues.filter(c => c.distance !== distance);
+    distanceCues.push({ distance, text });
+    renderDistanceCueList();
+    newCueTextEl.value = '';
+    newCueTextEl.focus();
+  });
+
+  renderDistanceCueList();
 
   customModeToggleEl.addEventListener('click', function(){
     customModeOn = !customModeOn;
