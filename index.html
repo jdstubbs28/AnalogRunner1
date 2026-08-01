@@ -217,6 +217,42 @@
     border:1px solid var(--speed);
     border-radius:14px;
   }
+  .route-progress-wrap{
+    margin-top:18px;
+    padding:14px 16px;
+    background:#12141a;
+    border:1px solid var(--line);
+    border-radius:14px;
+  }
+  .route-progress-label{
+    text-align:center;
+    font-family: var(--mono);
+    font-size:12px;
+    letter-spacing:.06em;
+    color: var(--speed);
+    margin-bottom:8px;
+  }
+  .route-progress-svg{
+    width:100%;
+    height:auto;
+    display:block;
+  }
+  #routePathFill{
+    transition: stroke-dashoffset 0.2s linear;
+  }
+  #routeProgressDot{
+    transition: cx 0.2s linear, cy 0.2s linear;
+  }
+  .route-cue-marker{ fill: var(--warm); }
+  .route-cue-marker.passed{ fill: var(--speed); }
+  .route-progress-next{
+    text-align:center;
+    font-family: var(--mono);
+    font-size:11.5px;
+    color:var(--dim);
+    margin-top:8px;
+    min-height:14px;
+  }
   .session-prompt .plain-input{
     margin-top:10px;
   }
@@ -581,6 +617,19 @@
         <button id="reset">Reset</button>
       </div>
 
+      <div class="route-progress-wrap" id="routeProgressWrap" style="display:none;">
+        <div class="route-progress-label" id="routeProgressLabel">0m / 0m</div>
+        <svg class="route-progress-svg" viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg">
+          <path id="routePathTrack" d="M 10 110 C 60 20, 120 20, 160 70 C 200 120, 260 120, 310 30"
+                fill="none" stroke="var(--line)" stroke-width="6" stroke-linecap="round"></path>
+          <path id="routePathFill" d="M 10 110 C 60 20, 120 20, 160 70 C 200 120, 260 120, 310 30"
+                fill="none" stroke="var(--speed)" stroke-width="6" stroke-linecap="round"></path>
+          <g id="routeCueMarkers"></g>
+          <circle id="routeProgressDot" r="7" fill="var(--speed)" stroke="var(--bg)" stroke-width="2"></circle>
+        </svg>
+        <div class="route-progress-next" id="routeProgressNext"></div>
+      </div>
+
       <div class="session-prompt" id="sessionPrompt" style="display:none;">
         <div class="calc-title">Session complete — how far did you go?</div>
         <div class="cue-points" id="sessionBeatsLabel"></div>
@@ -669,6 +718,10 @@
         <div class="cue-points" id="strideVoiceDebug"></div>
 
         <div class="calc-title" style="margin-top:16px;">Route cues</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Route length (m) — where the progress bar reads 100%</label>
+          <input type="number" id="routeLengthInput" class="plain-input" value="900.8" min="1" step="0.1">
+        </div>
         <div class="custom-interval-list" id="distanceCueList"></div>
         <div class="field-row">
           <div class="field">
@@ -846,6 +899,18 @@
     }catch(e){ /* storage unavailable — cues just won't persist */ }
   }
   let distanceCues = loadDistanceCues(); // { distance, text } — spoken instead of "X meters" at that distance
+
+  const ROUTE_LENGTH_KEY = 'intervalClock_routeLength';
+  function loadRouteLength(){
+    try{
+      const raw = localStorage.getItem(ROUTE_LENGTH_KEY);
+      return raw ? parseFloat(raw) : 900.8;
+    }catch(e){ return 900.8; }
+  }
+  function saveRouteLength(){
+    try{ localStorage.setItem(ROUTE_LENGTH_KEY, String(routeLengthM)); }catch(e){}
+  }
+  let routeLengthM = loadRouteLength();
 
   // Utterances with no external reference can get garbage-collected mid-speech in
   // some browsers (notably Chrome), silently killing the audio — so we hold onto
@@ -1108,18 +1173,24 @@
     updateBeatCounter();
     fillBeatCounter++;
     updateLoadingFill();
-    announceDistanceIfNeeded();
+    updateSessionDistance();
   }
 
-  function announceDistanceIfNeeded(){
-    if (!strideVoiceOn || !customModeOn) return;
+  function updateSessionDistance(){
+    if (!customModeOn) return;
     const step = schedule[stepIndex];
     if (!step || step.type !== 'work' || typeof step.stride !== 'number') return;
     sessionDistanceM += step.stride;
-    while (lastDistanceCueM + 100 <= sessionDistanceM){
-      lastDistanceCueM += 100;
-      const cue = distanceCues.find(c => c.distance === lastDistanceCueM);
-      speak(cue ? cue.text : (lastDistanceCueM + ' meters'));
+    renderRouteProgress();
+    if (strideVoiceOn){
+      while (lastDistanceCueM + 100 <= sessionDistanceM){
+        lastDistanceCueM += 100;
+        const cue = distanceCues.find(c => c.distance === lastDistanceCueM);
+        speak(cue ? cue.text : (lastDistanceCueM + ' meters'));
+      }
+    } else {
+      // keep in sync so re-enabling voice mid-run doesn't burst-announce a backlog
+      lastDistanceCueM = Math.floor(sessionDistanceM / 100) * 100;
     }
   }
 
@@ -1379,6 +1450,7 @@
     sessionBeatTotal = 0;
     sessionDistanceM = 0;
     lastDistanceCueM = 0;
+    renderRouteProgress();
     document.getElementById('sessionPrompt').style.display = 'none';
     els.liveDot.classList.remove('live');
     els.startPause.textContent = 'Start';
@@ -1508,9 +1580,76 @@
         distanceCues = distanceCues.filter(c => c.distance !== d);
         saveDistanceCues();
         renderDistanceCueList();
+        updateRouteVisibility();
       });
     });
   }
+
+  // --- Route progress bar: a winding SVG path that fills as sessionDistanceM grows ---
+  const routeProgressWrapEl = document.getElementById('routeProgressWrap');
+  const routeProgressLabelEl = document.getElementById('routeProgressLabel');
+  const routePathTrackEl = document.getElementById('routePathTrack');
+  const routePathFillEl = document.getElementById('routePathFill');
+  const routeCueMarkersEl = document.getElementById('routeCueMarkers');
+  const routeProgressDotEl = document.getElementById('routeProgressDot');
+  const routeProgressNextEl = document.getElementById('routeProgressNext');
+  const routeLengthInputEl = document.getElementById('routeLengthInput');
+  routeLengthInputEl.value = routeLengthM;
+
+  function renderRouteCueMarkers(){
+    const total = routePathTrackEl.getTotalLength();
+    routeCueMarkersEl.innerHTML = '';
+    distanceCues.forEach(cue => {
+      const frac = Math.max(0, Math.min(1, cue.distance / routeLengthM));
+      const pt = routePathTrackEl.getPointAtLength(frac * total);
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', pt.x);
+      circle.setAttribute('cy', pt.y);
+      circle.setAttribute('r', 4);
+      circle.setAttribute('class', 'route-cue-marker');
+      circle.dataset.distance = cue.distance;
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.textContent = cue.distance + 'm: ' + cue.text;
+      circle.appendChild(title);
+      routeCueMarkersEl.appendChild(circle);
+    });
+  }
+
+  function renderRouteProgress(){
+    if (routeProgressWrapEl.style.display === 'none') return;
+    const total = routePathTrackEl.getTotalLength();
+    const frac = Math.max(0, Math.min(1, sessionDistanceM / routeLengthM));
+    routePathFillEl.setAttribute('stroke-dasharray', total);
+    routePathFillEl.setAttribute('stroke-dashoffset', total * (1 - frac));
+    const pt = routePathTrackEl.getPointAtLength(frac * total);
+    routeProgressDotEl.setAttribute('cx', pt.x);
+    routeProgressDotEl.setAttribute('cy', pt.y);
+    routeProgressLabelEl.textContent = Math.round(sessionDistanceM) + 'm / ' + routeLengthM.toFixed(1) + 'm';
+
+    routeCueMarkersEl.querySelectorAll('.route-cue-marker').forEach(m => {
+      m.classList.toggle('passed', sessionDistanceM >= parseFloat(m.dataset.distance));
+    });
+
+    const upcoming = distanceCues.filter(c => c.distance > sessionDistanceM).sort((a, b) => a.distance - b.distance)[0];
+    routeProgressNextEl.textContent = upcoming
+      ? 'Next: ' + upcoming.text + ' in ' + Math.max(0, Math.round(upcoming.distance - sessionDistanceM)) + 'm'
+      : (distanceCues.length ? 'Route complete' : '');
+  }
+
+  function updateRouteVisibility(){
+    const show = customModeOn && distanceCues.length > 0;
+    routeProgressWrapEl.style.display = show ? 'block' : 'none';
+    if (show){
+      renderRouteCueMarkers();
+      renderRouteProgress();
+    }
+  }
+
+  routeLengthInputEl.addEventListener('change', () => {
+    routeLengthM = Math.max(1, parseFloat(routeLengthInputEl.value) || 900.8);
+    saveRouteLength();
+    updateRouteVisibility();
+  });
 
   document.getElementById('addDistanceCueBtn').addEventListener('click', () => {
     const distance = Math.max(100, Math.round((parseFloat(newCueDistanceEl.value) || 100) / 100) * 100);
@@ -1520,6 +1659,7 @@
     distanceCues.push({ distance, text });
     saveDistanceCues();
     renderDistanceCueList();
+    updateRouteVisibility();
     newCueTextEl.value = '';
     newCueTextEl.focus();
   });
@@ -1537,6 +1677,7 @@
   });
 
   renderDistanceCueList();
+  updateRouteVisibility();
 
   customModeToggleEl.addEventListener('click', function(){
     customModeOn = !customModeOn;
@@ -1544,6 +1685,7 @@
     simpleConfigWrapEl.style.display = customModeOn ? 'none' : 'block';
     customConfigWrapEl.style.display = customModeOn ? 'block' : 'none';
     if (!running) resetTimer();
+    updateRouteVisibility();
   });
 
   document.getElementById('strideVoiceToggle').addEventListener('click', function(){
