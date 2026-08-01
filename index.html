@@ -828,18 +828,31 @@
   function speak(text){
     try{
       if (!('speechSynthesis' in window)) return;
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = 1.0;
-      utter.volume = 1.0;
-      activeUtterances.push(utter);
-      const release = () => {
-        const idx = activeUtterances.indexOf(utter);
-        if (idx !== -1) activeUtterances.splice(idx, 1);
-      };
-      utter.onend = release;
-      utter.onerror = release;
-      window.speechSynthesis.speak(utter);
+      // Chrome/Edge on Windows has a known bug where the speech queue can get stuck
+      // in a paused state and silently swallow new requests (they never fire onstart
+      // or onerror). Clearing the queue first, then speaking a beat later, works
+      // around it.
+      window.speechSynthesis.cancel();
+      setTimeout(() => {
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 1.0;
+        utter.volume = 1.0;
+        activeUtterances.push(utter);
+        const release = () => {
+          const idx = activeUtterances.indexOf(utter);
+          if (idx !== -1) activeUtterances.splice(idx, 1);
+        };
+        utter.onend = release;
+        utter.onerror = release;
+        window.speechSynthesis.speak(utter);
+      }, 30);
     }catch(e){}
+  }
+
+  // Backstop for the same stuck-queue bug: if the engine reports "speaking" but
+  // nothing is actually coming out, a resume() call on a live interval un-sticks it.
+  if ('speechSynthesis' in window){
+    setInterval(() => { window.speechSynthesis.resume(); }, 5000);
   }
 
   function announceStrideIfNeeded(step){
@@ -1507,14 +1520,22 @@
       if (debugEl) debugEl.textContent = 'Test voice: speechSynthesis not supported in this browser';
       return;
     }
-    const utter = new SpeechSynthesisUtterance('Voice test, one two three');
-    utter.rate = 1.0;
-    utter.volume = 1.0;
-    utter.onstart = () => { if (debugEl) debugEl.textContent = 'Test voice: started playing at ' + new Date().toLocaleTimeString(); };
-    utter.onerror = (e) => { if (debugEl) debugEl.textContent = 'Test voice: error — ' + e.error; };
-    utter.onend = () => { if (debugEl) debugEl.textContent += ' (finished)'; };
-    if (debugEl) debugEl.textContent = 'Test voice: requested — ' + window.speechSynthesis.getVoices().length + ' voice(s) available';
-    window.speechSynthesis.speak(utter);
+    if (debugEl) debugEl.textContent = 'Test voice: requested — ' + window.speechSynthesis.getVoices().length + ' voice(s) available, clearing queue...';
+    window.speechSynthesis.cancel();
+    setTimeout(() => {
+      const utter = new SpeechSynthesisUtterance('Voice test, one two three');
+      utter.rate = 1.0;
+      utter.volume = 1.0;
+      utter.onstart = () => { if (debugEl) debugEl.textContent = 'Test voice: started playing at ' + new Date().toLocaleTimeString(); };
+      utter.onerror = (e) => { if (debugEl) debugEl.textContent = 'Test voice: error — ' + e.error; };
+      utter.onend = () => { if (debugEl) debugEl.textContent += ' (finished)'; };
+      window.speechSynthesis.speak(utter);
+      setTimeout(() => {
+        if (debugEl && debugEl.textContent.indexOf('clearing queue') !== -1){
+          debugEl.textContent = 'Test voice: still stuck after 2s — speaking: ' + window.speechSynthesis.speaking + ', pending: ' + window.speechSynthesis.pending + ', paused: ' + window.speechSynthesis.paused;
+        }
+      }, 2000);
+    }, 30);
   });
 
   addIntervalBtnEl.addEventListener('click', () => {
