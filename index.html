@@ -662,7 +662,7 @@
           <span>Voice: announce stride length</span>
           <div class="switch" id="strideVoiceToggle"></div>
         </div>
-        <div class="cue-points">Speaks stride length and estimated speed at the start of each custom interval, plus a callout every 100 meters</div>
+        <div class="cue-points">For intervals added via the stride calculator: speaks stride length and estimated speed at the start, plus a callout every 100 meters</div>
         <div class="cue-points" id="strideVoiceDebug"></div>
       </div>
 
@@ -835,7 +835,11 @@
       if (debugEl) debugEl.textContent = 'Stride voice: skipped (step type = ' + (step ? step.type : 'none') + ')';
       return;
     }
-    const stride = typeof step.stride === 'number' ? step.stride : (parseFloat(strideInputEl.value) || 1.0);
+    if (typeof step.stride !== 'number'){
+      if (debugEl) debugEl.textContent = 'Stride voice: skipped (no calculated stride for this interval)';
+      return;
+    }
+    const stride = step.stride;
     const bpm = typeof step.bpm === 'number' ? step.bpm : (parseInt(bpmInputEl.value) || 100);
     const speedKmh = (bpm * stride * 60) / 1000;
     speak('Stride length ' + stride.toFixed(2) + ' meters. Estimated speed ' + speedKmh.toFixed(1) + ' kilometers per hour.');
@@ -1050,8 +1054,8 @@
   function announceDistanceIfNeeded(){
     if (!strideVoiceOn || !customModeOn) return;
     const step = schedule[stepIndex];
-    const stride = (step && typeof step.stride === 'number') ? step.stride : getStride();
-    sessionDistanceM += stride;
+    if (!step || step.type !== 'work' || typeof step.stride !== 'number') return;
+    sessionDistanceM += step.stride;
     const milestone = Math.floor(sessionDistanceM / 100) * 100;
     if (milestone > lastDistanceCueM){
       lastDistanceCueM = milestone;
