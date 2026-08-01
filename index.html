@@ -662,7 +662,7 @@
           <span>Voice: announce stride length</span>
           <div class="switch" id="strideVoiceToggle"></div>
         </div>
-        <div class="cue-points">Speaks your stride length setting at the start of each custom interval</div>
+        <div class="cue-points">Speaks stride length and estimated speed at the start of each custom interval, plus a callout every 100 meters</div>
         <div class="cue-points" id="strideVoiceDebug"></div>
       </div>
 
@@ -962,6 +962,8 @@
   let beatCount = 0;
   let beatCountStepIndex = -1;
   let sessionBeatTotal = 0;
+  let sessionDistanceM = 0;
+  let lastDistanceCueM = 0;
   let beatHistory = loadBeatHistory(); // { round, beats, durationSec } for completed work intervals, persisted across sessions
   const bpmInputEl = document.getElementById('bpmInput');
   const beatCounterEl = document.getElementById('beatCounter');
@@ -1031,6 +1033,19 @@
     updateBeatCounter();
     fillBeatCounter++;
     updateLoadingFill();
+    announceDistanceIfNeeded();
+  }
+
+  function announceDistanceIfNeeded(){
+    if (!strideVoiceOn || !customModeOn) return;
+    const step = schedule[stepIndex];
+    const stride = (step && typeof step.stride === 'number') ? step.stride : getStride();
+    sessionDistanceM += stride;
+    const milestone = Math.floor(sessionDistanceM / 100) * 100;
+    if (milestone > lastDistanceCueM){
+      lastDistanceCueM = milestone;
+      speak(milestone + ' meters');
+    }
   }
 
   function updateBeatCounter(){
@@ -1287,6 +1302,8 @@
     beatCountStepIndex = -1;
     updateBeatCounter();
     sessionBeatTotal = 0;
+    sessionDistanceM = 0;
+    lastDistanceCueM = 0;
     document.getElementById('sessionPrompt').style.display = 'none';
     els.liveDot.classList.remove('live');
     els.startPause.textContent = 'Start';
