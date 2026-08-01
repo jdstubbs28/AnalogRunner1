@@ -718,9 +718,29 @@
         <div class="cue-points" id="strideVoiceDebug"></div>
 
         <div class="calc-title" style="margin-top:16px;">Route cues</div>
-        <div class="field" style="margin-bottom:10px;">
+        <div class="field-row">
+          <div class="field">
+            <label>Saved routes</label>
+            <select id="routeSelect" class="voice-select">
+              <option value="">— unsaved / current —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Route name</label>
+            <input type="text" id="routeNameInput" class="plain-input" placeholder="e.g. Douglas Ridge loop">
+          </div>
+        </div>
+        <div class="clear-history-row">
+          <button id="saveRouteBtn" class="text-btn">💾 Save as route</button>
+          <button id="deleteRouteBtn" class="text-btn">🗑 Delete route</button>
+        </div>
+        <div class="field" style="margin-top:10px; margin-bottom:10px;">
           <label>Route length (m) — where the progress bar reads 100%</label>
           <input type="number" id="routeLengthInput" class="plain-input" value="900.8" min="1" step="0.1">
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Cue lead time (m) — speak each cue this many meters before you reach it</label>
+          <input type="number" id="leadTimeInput" class="plain-input" value="20" min="0" step="5">
         </div>
         <div class="custom-interval-list" id="distanceCueList"></div>
         <div class="field-row">
@@ -911,6 +931,58 @@
     try{ localStorage.setItem(ROUTE_LENGTH_KEY, String(routeLengthM)); }catch(e){}
   }
   let routeLengthM = loadRouteLength();
+
+  const LEAD_TIME_KEY = 'intervalClock_leadTime';
+  function loadLeadTime(){
+    try{
+      const raw = localStorage.getItem(LEAD_TIME_KEY);
+      return raw !== null ? parseFloat(raw) : 20;
+    }catch(e){ return 20; }
+  }
+  function saveLeadTime(){
+    try{ localStorage.setItem(LEAD_TIME_KEY, String(leadTimeM)); }catch(e){}
+  }
+  let leadTimeM = loadLeadTime();
+
+  const ROUTES_KEY = 'intervalClock_routes';
+  const DEFAULT_ROUTES = [
+    { name: 'Douglas Ridge Close SE', routeLengthM: 900.8, leadTimeM: 20, cues: DEFAULT_DISTANCE_CUES.slice() }
+  ];
+  function loadRoutes(){
+    try{
+      const raw = localStorage.getItem(ROUTES_KEY);
+      return raw ? JSON.parse(raw) : DEFAULT_ROUTES.slice();
+    }catch(e){ return DEFAULT_ROUTES.slice(); }
+  }
+  function saveRoutesList(){
+    try{ localStorage.setItem(ROUTES_KEY, JSON.stringify(routes)); }catch(e){}
+  }
+  let routes = loadRoutes(); // [{ name, routeLengthM, leadTimeM, cues }] — presets you can switch between
+
+  // Trigger points for voice cues: grid marks with a defined cue fire `leadTimeM` meters early
+  // (so you hear "second house left" before you reach it); marks without one fire on the spot.
+  let triggerPoints = [];
+  let nextTriggerIndex = 0;
+  function computeTriggerPoints(){
+    const points = [];
+    const maxGrid = Math.ceil(routeLengthM / 100) * 100;
+    for (let n = 100; n <= maxGrid; n += 100){
+      const cue = distanceCues.find(c => c.distance === n);
+      if (cue){
+        const at = Math.max(0, n - leadTimeM);
+        const lead = n - at;
+        points.push({ at, text: lead > 0 ? ('In ' + Math.round(lead) + ' meters: ' + cue.text) : cue.text });
+      } else {
+        points.push({ at: n, text: n + ' meters' });
+      }
+    }
+    return points.sort((a, b) => a.at - b.at);
+  }
+  function rebuildTriggerPoints(){
+    triggerPoints = computeTriggerPoints();
+    nextTriggerIndex = triggerPoints.findIndex(p => p.at > sessionDistanceM);
+    if (nextTriggerIndex === -1) nextTriggerIndex = triggerPoints.length;
+  }
 
   // Utterances with no external reference can get garbage-collected mid-speech in
   // some browsers (notably Chrome), silently killing the audio — so we hold onto
@@ -1103,7 +1175,6 @@
   let beatCountStepIndex = -1;
   let sessionBeatTotal = 0;
   let sessionDistanceM = 0;
-  let lastDistanceCueM = 0;
   let beatHistory = loadBeatHistory(); // { round, beats, durationSec } for completed work intervals, persisted across sessions
   const bpmInputEl = document.getElementById('bpmInput');
   const beatCounterEl = document.getElementById('beatCounter');
@@ -1182,15 +1253,10 @@
     if (!step || step.type !== 'work' || typeof step.stride !== 'number') return;
     sessionDistanceM += step.stride;
     renderRouteProgress();
-    if (strideVoiceOn){
-      while (lastDistanceCueM + 100 <= sessionDistanceM){
-        lastDistanceCueM += 100;
-        const cue = distanceCues.find(c => c.distance === lastDistanceCueM);
-        speak(cue ? cue.text : (lastDistanceCueM + ' meters'));
-      }
-    } else {
-      // keep in sync so re-enabling voice mid-run doesn't burst-announce a backlog
-      lastDistanceCueM = Math.floor(sessionDistanceM / 100) * 100;
+    while (nextTriggerIndex < triggerPoints.length && triggerPoints[nextTriggerIndex].at <= sessionDistanceM){
+      const point = triggerPoints[nextTriggerIndex];
+      nextTriggerIndex++;
+      if (strideVoiceOn) speak(point.text);
     }
   }
 
@@ -1449,7 +1515,7 @@
     updateBeatCounter();
     sessionBeatTotal = 0;
     sessionDistanceM = 0;
-    lastDistanceCueM = 0;
+    rebuildTriggerPoints();
     renderRouteProgress();
     document.getElementById('sessionPrompt').style.display = 'none';
     els.liveDot.classList.remove('live');
@@ -1581,6 +1647,7 @@
         saveDistanceCues();
         renderDistanceCueList();
         updateRouteVisibility();
+        rebuildTriggerPoints();
       });
     });
   }
@@ -1649,6 +1716,15 @@
     routeLengthM = Math.max(1, parseFloat(routeLengthInputEl.value) || 900.8);
     saveRouteLength();
     updateRouteVisibility();
+    rebuildTriggerPoints();
+  });
+
+  const leadTimeInputEl = document.getElementById('leadTimeInput');
+  leadTimeInputEl.value = leadTimeM;
+  leadTimeInputEl.addEventListener('change', () => {
+    leadTimeM = Math.max(0, parseFloat(leadTimeInputEl.value) || 0);
+    saveLeadTime();
+    rebuildTriggerPoints();
   });
 
   document.getElementById('addDistanceCueBtn').addEventListener('click', () => {
@@ -1660,6 +1736,7 @@
     saveDistanceCues();
     renderDistanceCueList();
     updateRouteVisibility();
+    rebuildTriggerPoints();
     newCueTextEl.value = '';
     newCueTextEl.focus();
   });
@@ -1676,8 +1753,56 @@
     }
   });
 
+  const routeSelectEl = document.getElementById('routeSelect');
+  const routeNameInputEl = document.getElementById('routeNameInput');
+
+  function renderRouteSelect(){
+    const current = routeSelectEl.value;
+    routeSelectEl.innerHTML = '<option value="">— unsaved / current —</option>' +
+      routes.map((r, i) => '<option value="' + i + '">' + r.name + '</option>').join('');
+    routeSelectEl.value = (current !== '' && routes[current]) ? current : '';
+  }
+
+  routeSelectEl.addEventListener('change', function(){
+    if (this.value === '') return;
+    const r = routes[parseInt(this.value)];
+    if (!r) return;
+    routeLengthM = r.routeLengthM;
+    leadTimeM = r.leadTimeM;
+    distanceCues = r.cues.slice();
+    saveRouteLength();
+    saveLeadTime();
+    saveDistanceCues();
+    routeLengthInputEl.value = routeLengthM;
+    leadTimeInputEl.value = leadTimeM;
+    routeNameInputEl.value = r.name;
+    renderDistanceCueList();
+    updateRouteVisibility();
+    rebuildTriggerPoints();
+  });
+
+  document.getElementById('saveRouteBtn').addEventListener('click', () => {
+    const name = routeNameInputEl.value.trim();
+    if (!name) return;
+    const data = { name, routeLengthM, leadTimeM, cues: distanceCues.slice() };
+    const existingIdx = routes.findIndex(r => r.name === name);
+    if (existingIdx !== -1) routes[existingIdx] = data; else routes.push(data);
+    saveRoutesList();
+    renderRouteSelect();
+    routeSelectEl.value = String(routes.findIndex(r => r.name === name));
+  });
+
+  document.getElementById('deleteRouteBtn').addEventListener('click', () => {
+    if (routeSelectEl.value === '') return;
+    routes.splice(parseInt(routeSelectEl.value), 1);
+    saveRoutesList();
+    renderRouteSelect();
+  });
+
+  renderRouteSelect();
   renderDistanceCueList();
   updateRouteVisibility();
+  rebuildTriggerPoints();
 
   customModeToggleEl.addEventListener('click', function(){
     customModeOn = !customModeOn;
