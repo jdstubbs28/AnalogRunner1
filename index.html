@@ -682,8 +682,10 @@
         </div>
         <div class="clear-history-row">
           <button id="addDistanceCueBtn" class="text-btn">+ Add route cue</button>
+          <button id="exportCuesBtn" class="text-btn">📋 Export cues</button>
         </div>
         <div class="cue-points">Spoken instead of the generic "X meters" callout when you reach that distance</div>
+        <textarea id="exportCuesOutput" class="plain-input" readonly style="display:none; margin-top:10px; height:120px; resize:vertical;"></textarea>
       </div>
 
       <div class="toggle-row">
@@ -819,7 +821,31 @@
   let customModeOn = false;
   let customIntervals = []; // { duration, bpm }
   let strideVoiceOn = false;
-  let distanceCues = []; // { distance, text } — spoken instead of "X meters" at that distance
+  const DISTANCE_CUES_KEY = 'intervalClock_distanceCues';
+  const DEFAULT_DISTANCE_CUES = [
+    { distance: 100, text: 'second house left' },
+    { distance: 200, text: 'white house right' },
+    { distance: 300, text: 'treeleft' },
+    { distance: 400, text: 'corridor' },
+    { distance: 500, text: 'treeright' },
+    { distance: 600, text: 'between' },
+    { distance: 700, text: 'benend' },
+    { distance: 800, text: 'approach' },
+    { distance: 900, text: 'cornerright' },
+    { distance: 1000, text: 'treeright' }
+  ];
+  function loadDistanceCues(){
+    try{
+      const raw = localStorage.getItem(DISTANCE_CUES_KEY);
+      return raw ? JSON.parse(raw) : DEFAULT_DISTANCE_CUES.slice();
+    }catch(e){ return DEFAULT_DISTANCE_CUES.slice(); }
+  }
+  function saveDistanceCues(){
+    try{
+      localStorage.setItem(DISTANCE_CUES_KEY, JSON.stringify(distanceCues));
+    }catch(e){ /* storage unavailable — cues just won't persist */ }
+  }
+  let distanceCues = loadDistanceCues(); // { distance, text } — spoken instead of "X meters" at that distance
 
   // Utterances with no external reference can get garbage-collected mid-speech in
   // some browsers (notably Chrome), silently killing the audio — so we hold onto
@@ -1480,6 +1506,7 @@
       btn.addEventListener('click', () => {
         const d = parseFloat(btn.dataset.distance);
         distanceCues = distanceCues.filter(c => c.distance !== d);
+        saveDistanceCues();
         renderDistanceCueList();
       });
     });
@@ -1491,9 +1518,22 @@
     if (!text) return;
     distanceCues = distanceCues.filter(c => c.distance !== distance);
     distanceCues.push({ distance, text });
+    saveDistanceCues();
     renderDistanceCueList();
     newCueTextEl.value = '';
     newCueTextEl.focus();
+  });
+
+  document.getElementById('exportCuesBtn').addEventListener('click', () => {
+    const outputEl = document.getElementById('exportCuesOutput');
+    const sorted = distanceCues.slice().sort((a, b) => a.distance - b.distance);
+    outputEl.value = sorted.map(c => c.distance + 'm: ' + c.text).join('\n');
+    outputEl.style.display = 'block';
+    outputEl.focus();
+    outputEl.select();
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(outputEl.value).catch(() => {});
+    }
   });
 
   renderDistanceCueList();
