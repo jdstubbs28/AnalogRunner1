@@ -663,6 +663,9 @@
           <div class="switch" id="strideVoiceToggle"></div>
         </div>
         <div class="cue-points">For intervals added via the stride calculator: speaks stride length and estimated speed at the start, plus a callout every 100 meters</div>
+        <div class="clear-history-row">
+          <button id="testVoiceBtn" class="text-btn">🔊 Test voice</button>
+        </div>
         <div class="cue-points" id="strideVoiceDebug"></div>
       </div>
 
@@ -1439,6 +1442,22 @@
     if (strideVoiceOn && 'speechSynthesis' in window){
       speak('Stride voice cues on');
     }
+  });
+
+  document.getElementById('testVoiceBtn').addEventListener('click', function(){
+    const debugEl = document.getElementById('strideVoiceDebug');
+    if (!('speechSynthesis' in window)){
+      if (debugEl) debugEl.textContent = 'Test voice: speechSynthesis not supported in this browser';
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance('Voice test, one two three');
+    utter.rate = 1.0;
+    utter.volume = 1.0;
+    utter.onstart = () => { if (debugEl) debugEl.textContent = 'Test voice: started playing at ' + new Date().toLocaleTimeString(); };
+    utter.onerror = (e) => { if (debugEl) debugEl.textContent = 'Test voice: error — ' + e.error; };
+    utter.onend = () => { if (debugEl) debugEl.textContent += ' (finished)'; };
+    if (debugEl) debugEl.textContent = 'Test voice: requested — ' + window.speechSynthesis.getVoices().length + ' voice(s) available';
+    window.speechSynthesis.speak(utter);
   });
 
   addIntervalBtnEl.addEventListener('click', () => {
