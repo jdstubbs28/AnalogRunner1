@@ -825,8 +825,10 @@
       return;
     }
     const stride = typeof step.stride === 'number' ? step.stride : (parseFloat(strideInputEl.value) || 1.0);
-    speak('Stride length ' + stride.toFixed(2) + ' meters');
-    if (debugEl) debugEl.textContent = 'Stride voice: announced ' + stride.toFixed(2) + 'm at ' + new Date().toLocaleTimeString();
+    const bpm = typeof step.bpm === 'number' ? step.bpm : (parseInt(bpmInputEl.value) || 100);
+    const speedKmh = (bpm * stride * 60) / 1000;
+    speak('Stride length ' + stride.toFixed(2) + ' meters. Estimated speed ' + speedKmh.toFixed(1) + ' kilometers per hour.');
+    if (debugEl) debugEl.textContent = 'Stride voice: announced ' + stride.toFixed(2) + 'm, ' + speedKmh.toFixed(1) + 'km/h at ' + new Date().toLocaleTimeString();
   }
 
   function buildSchedule(){
@@ -1371,13 +1373,16 @@
       customIntervalListEl.innerHTML = '<div class="cue-points">No custom intervals yet — add one below</div>';
       return;
     }
-    customIntervalListEl.innerHTML = customIntervals.map((ci, i) =>
-      '<div class="custom-interval-row">' +
+    customIntervalListEl.innerHTML = customIntervals.map((ci, i) => {
+      const stride = typeof ci.stride === 'number' ? ci.stride : getStride();
+      const speedKmh = (ci.bpm * stride * 60) / 1000;
+      return '<div class="custom-interval-row">' +
         '<span class="label">' + (i + 1) + '. ' + ci.duration + 's @ ' + ci.bpm + ' bpm' +
-          (typeof ci.stride === 'number' ? ' · ' + ci.stride.toFixed(2) + 'm/beat' : '') + '</span>' +
+          (typeof ci.stride === 'number' ? ' · ' + ci.stride.toFixed(2) + 'm/beat' : '') +
+          ' · ' + speedKmh.toFixed(1) + 'km/h</span>' +
         '<button class="remove-btn" data-idx="' + i + '">✕</button>' +
-      '</div>'
-    ).join('');
+      '</div>';
+    }).join('');
 
     customIntervalListEl.querySelectorAll('.remove-btn').forEach(btn => {
       btn.addEventListener('click', () => {
