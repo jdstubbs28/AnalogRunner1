@@ -749,15 +749,19 @@
             <input type="number" id="newCueDistance" class="plain-input" value="100" min="100" step="100">
           </div>
           <div class="field">
-            <label>Cue text</label>
-            <input type="text" id="newCueText" class="plain-input" placeholder="e.g. second house left">
+            <label>Short name</label>
+            <input type="text" id="newCueName" class="plain-input" placeholder="e.g. Oak Tree">
           </div>
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Spoken text</label>
+          <input type="text" id="newCueText" class="plain-input" placeholder="e.g. turn right at the big oak tree">
         </div>
         <div class="clear-history-row">
           <button id="addDistanceCueBtn" class="text-btn">+ Add route cue</button>
           <button id="exportCuesBtn" class="text-btn">📋 Export cues</button>
         </div>
-        <div class="cue-points">Spoken instead of the generic "X meters" callout when you reach that distance</div>
+        <div class="cue-points">The name shows in lists and the progress bar; the spoken text is what's said aloud (before the distance, if lead time is set)</div>
         <textarea id="exportCuesOutput" class="plain-input" readonly style="display:none; margin-top:10px; height:120px; resize:vertical;"></textarea>
       </div>
 
@@ -879,6 +883,10 @@
 
   const COLORS = { warmup: '#e8c547', work: '#ff6a3d', rest: '#35c9c1', done: '#7ee787' };
 
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   let soundOn = true;
   let running = false;
   let schedule = [];   // list of {type, duration}
@@ -896,21 +904,25 @@
   let strideVoiceOn = false;
   const DISTANCE_CUES_KEY = 'intervalClock_distanceCues';
   const DEFAULT_DISTANCE_CUES = [
-    { distance: 100, text: 'second house left' },
-    { distance: 200, text: 'white house right' },
-    { distance: 300, text: 'treeleft' },
-    { distance: 400, text: 'corridor' },
-    { distance: 500, text: 'treeright' },
-    { distance: 600, text: 'between' },
-    { distance: 700, text: 'benend' },
-    { distance: 800, text: 'approach' },
-    { distance: 900, text: 'cornerright' },
-    { distance: 1000, text: 'treeright' }
+    { distance: 100, name: 'second house left', text: 'second house left' },
+    { distance: 200, name: 'white house right', text: 'white house right' },
+    { distance: 300, name: 'treeleft', text: 'treeleft' },
+    { distance: 400, name: 'corridor', text: 'corridor' },
+    { distance: 500, name: 'treeright', text: 'treeright' },
+    { distance: 600, name: 'between', text: 'between' },
+    { distance: 700, name: 'benend', text: 'benend' },
+    { distance: 800, name: 'approach', text: 'approach' },
+    { distance: 900, name: 'cornerright', text: 'cornerright' },
+    { distance: 1000, name: 'treeright', text: 'treeright' }
   ];
+  // Older saved cues may only have {distance, text} — backfill name from text.
+  function migrateCue(cue){
+    return { distance: cue.distance, name: cue.name || cue.text, text: cue.text };
+  }
   function loadDistanceCues(){
     try{
       const raw = localStorage.getItem(DISTANCE_CUES_KEY);
-      return raw ? JSON.parse(raw) : DEFAULT_DISTANCE_CUES.slice();
+      return raw ? JSON.parse(raw).map(migrateCue) : DEFAULT_DISTANCE_CUES.slice();
     }catch(e){ return DEFAULT_DISTANCE_CUES.slice(); }
   }
   function saveDistanceCues(){
@@ -918,7 +930,7 @@
       localStorage.setItem(DISTANCE_CUES_KEY, JSON.stringify(distanceCues));
     }catch(e){ /* storage unavailable — cues just won't persist */ }
   }
-  let distanceCues = loadDistanceCues(); // { distance, text } — spoken instead of "X meters" at that distance
+  let distanceCues = loadDistanceCues(); // { distance, name, text } — name shows in lists, text is spoken
 
   const ROUTE_LENGTH_KEY = 'intervalClock_routeLength';
   function loadRouteLength(){
@@ -951,7 +963,10 @@
   function loadRoutes(){
     try{
       const raw = localStorage.getItem(ROUTES_KEY);
-      return raw ? JSON.parse(raw) : DEFAULT_ROUTES.slice();
+      if (!raw) return DEFAULT_ROUTES.slice();
+      const parsed = JSON.parse(raw);
+      parsed.forEach(r => { r.cues = r.cues.map(migrateCue); });
+      return parsed;
     }catch(e){ return DEFAULT_ROUTES.slice(); }
   }
   function saveRoutesList(){
@@ -1634,8 +1649,8 @@
     }
     const sorted = distanceCues.slice().sort((a, b) => a.distance - b.distance);
     distanceCueListEl.innerHTML = sorted.map((cue) =>
-      '<div class="custom-interval-row">' +
-        '<span class="label">' + cue.distance + 'm: ' + cue.text + '</span>' +
+      '<div class="custom-interval-row" title="' + escapeHtml(cue.text) + '">' +
+        '<span class="label">' + cue.distance + 'm: ' + escapeHtml(cue.name) + '</span>' +
         '<button class="remove-btn" data-distance="' + cue.distance + '">✕</button>' +
       '</div>'
     ).join('');
@@ -1676,7 +1691,7 @@
       circle.setAttribute('class', 'route-cue-marker');
       circle.dataset.distance = cue.distance;
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = cue.distance + 'm: ' + cue.text;
+      title.textContent = cue.distance + 'm: ' + cue.name;
       circle.appendChild(title);
       routeCueMarkersEl.appendChild(circle);
     });
@@ -1699,7 +1714,7 @@
 
     const upcoming = distanceCues.filter(c => c.distance > sessionDistanceM).sort((a, b) => a.distance - b.distance)[0];
     routeProgressNextEl.textContent = upcoming
-      ? 'Next: ' + upcoming.text + ' in ' + Math.max(0, Math.round(upcoming.distance - sessionDistanceM)) + 'm'
+      ? 'Next: ' + upcoming.name + ' in ' + Math.max(0, Math.round(upcoming.distance - sessionDistanceM)) + 'm'
       : (distanceCues.length ? 'Route complete' : '');
   }
 
@@ -1727,24 +1742,28 @@
     rebuildTriggerPoints();
   });
 
+  const newCueNameEl = document.getElementById('newCueName');
+
   document.getElementById('addDistanceCueBtn').addEventListener('click', () => {
     const distance = Math.max(100, Math.round((parseFloat(newCueDistanceEl.value) || 100) / 100) * 100);
     const text = newCueTextEl.value.trim();
+    const name = newCueNameEl.value.trim() || text;
     if (!text) return;
     distanceCues = distanceCues.filter(c => c.distance !== distance);
-    distanceCues.push({ distance, text });
+    distanceCues.push({ distance, name, text });
     saveDistanceCues();
     renderDistanceCueList();
     updateRouteVisibility();
     rebuildTriggerPoints();
+    newCueNameEl.value = '';
     newCueTextEl.value = '';
-    newCueTextEl.focus();
+    newCueNameEl.focus();
   });
 
   document.getElementById('exportCuesBtn').addEventListener('click', () => {
     const outputEl = document.getElementById('exportCuesOutput');
     const sorted = distanceCues.slice().sort((a, b) => a.distance - b.distance);
-    outputEl.value = sorted.map(c => c.distance + 'm: ' + c.text).join('\n');
+    outputEl.value = sorted.map(c => c.distance + 'm: ' + c.name + (c.name !== c.text ? ' (says: "' + c.text + '")' : '')).join('\n');
     outputEl.style.display = 'block';
     outputEl.focus();
     outputEl.select();
