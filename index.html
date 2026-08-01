@@ -824,9 +824,9 @@
       if (debugEl) debugEl.textContent = 'Stride voice: skipped (step type = ' + (step ? step.type : 'none') + ')';
       return;
     }
-    const stride = parseFloat(strideInputEl.value) || 1.0;
-    speak('Stride length ' + stride.toFixed(1) + ' meters');
-    if (debugEl) debugEl.textContent = 'Stride voice: announced ' + stride.toFixed(1) + 'm at ' + new Date().toLocaleTimeString();
+    const stride = typeof step.stride === 'number' ? step.stride : (parseFloat(strideInputEl.value) || 1.0);
+    speak('Stride length ' + stride.toFixed(2) + ' meters');
+    if (debugEl) debugEl.textContent = 'Stride voice: announced ' + stride.toFixed(2) + 'm at ' + new Date().toLocaleTimeString();
   }
 
   function buildSchedule(){
@@ -837,7 +837,7 @@
     if (customModeOn && customIntervals.length){
       if (warmup > 0) s.push({ type: 'warmup', duration: warmup });
       customIntervals.forEach((ci, i) => {
-        s.push({ type: 'work', duration: ci.duration, round: i + 1, bpm: ci.bpm });
+        s.push({ type: 'work', duration: ci.duration, round: i + 1, bpm: ci.bpm, stride: ci.stride });
         if (rest > 0 && i < customIntervals.length - 1) s.push({ type: 'rest', duration: rest, round: i + 1 });
       });
       s.push({ type: 'done', duration: 0 });
@@ -1373,7 +1373,8 @@
     }
     customIntervalListEl.innerHTML = customIntervals.map((ci, i) =>
       '<div class="custom-interval-row">' +
-        '<span class="label">' + (i + 1) + '. ' + ci.duration + 's @ ' + ci.bpm + ' bpm</span>' +
+        '<span class="label">' + (i + 1) + '. ' + ci.duration + 's @ ' + ci.bpm + ' bpm' +
+          (typeof ci.stride === 'number' ? ' · ' + ci.stride.toFixed(2) + 'm/beat' : '') + '</span>' +
         '<button class="remove-btn" data-idx="' + i + '">✕</button>' +
       '</div>'
     ).join('');
@@ -1728,7 +1729,8 @@
     if (lastCalcDurationSec === null || lastCalcBpm === null) return;
     const duration = Math.max(1, Math.round(lastCalcDurationSec));
     const bpm = Math.max(20, Math.min(300, Math.round(lastCalcBpm)));
-    customIntervals.push({ duration, bpm });
+    const stride = calculatedStride === null ? null : Math.max(0.1, Math.min(3, calculatedStride));
+    customIntervals.push({ duration, bpm, stride });
     renderCustomIntervalList();
 
     // switch to custom-interval mode so the added interval actually gets used
