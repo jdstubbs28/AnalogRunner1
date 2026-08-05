@@ -712,6 +712,12 @@
           <div class="switch" id="strideVoiceToggle"></div>
         </div>
         <div class="cue-points">For intervals added via the stride calculator: speaks stride length and estimated speed at the start, plus a callout every 100 meters</div>
+        <div class="field" style="margin-top:10px;">
+          <label>Voice</label>
+          <select id="voiceSelect" class="voice-select">
+            <option value="">System default</option>
+          </select>
+        </div>
         <div class="clear-history-row">
           <button id="testVoiceBtn" class="text-btn">🔊 Test voice</button>
         </div>
@@ -1003,6 +1009,19 @@
   // some browsers (notably Chrome), silently killing the audio — so we hold onto
   // each one until it finishes.
   const activeUtterances = [];
+  const VOICE_URI_KEY = 'intervalClock_voiceURI';
+  function loadSelectedVoiceURI(){
+    try{ return localStorage.getItem(VOICE_URI_KEY) || ''; }catch(e){ return ''; }
+  }
+  function saveSelectedVoiceURI(uri){
+    try{ localStorage.setItem(VOICE_URI_KEY, uri); }catch(e){}
+  }
+  let selectedVoiceURI = loadSelectedVoiceURI();
+  function getSelectedVoice(){
+    if (!selectedVoiceURI || !('speechSynthesis' in window)) return null;
+    return window.speechSynthesis.getVoices().find(v => v.voiceURI === selectedVoiceURI) || null;
+  }
+
   function speak(text){
     try{
       if (!('speechSynthesis' in window)) return;
@@ -1015,6 +1034,8 @@
         const utter = new SpeechSynthesisUtterance(text);
         utter.rate = 1.0;
         utter.volume = 1.0;
+        const voice = getSelectedVoice();
+        if (voice) utter.voice = voice;
         activeUtterances.push(utter);
         const release = () => {
           const idx = activeUtterances.indexOf(utter);
@@ -1840,6 +1861,24 @@
     }
   });
 
+  const voiceSelectEl = document.getElementById('voiceSelect');
+  function populateVoiceSelect(){
+    if (!('speechSynthesis' in window)) return;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return;
+    voiceSelectEl.innerHTML = '<option value="">System default</option>' +
+      voices.map(v => '<option value="' + v.voiceURI + '">' + v.name + ' (' + v.lang + ')' + (v.localService ? '' : ' — online') + '</option>').join('');
+    voiceSelectEl.value = voices.some(v => v.voiceURI === selectedVoiceURI) ? selectedVoiceURI : '';
+  }
+  if ('speechSynthesis' in window){
+    populateVoiceSelect();
+    window.speechSynthesis.addEventListener('voiceschanged', populateVoiceSelect);
+  }
+  voiceSelectEl.addEventListener('change', function(){
+    selectedVoiceURI = this.value;
+    saveSelectedVoiceURI(selectedVoiceURI);
+  });
+
   document.getElementById('testVoiceBtn').addEventListener('click', function(){
     const debugEl = document.getElementById('strideVoiceDebug');
     if (!('speechSynthesis' in window)){
@@ -1852,8 +1891,10 @@
       const utter = new SpeechSynthesisUtterance('Voice test, one two three');
       utter.rate = 1.0;
       utter.volume = 1.0;
-      utter.onstart = () => { if (debugEl) debugEl.textContent = 'Test voice: started playing at ' + new Date().toLocaleTimeString(); };
-      utter.onerror = (e) => { if (debugEl) debugEl.textContent = 'Test voice: error — ' + e.error; };
+      const voice = getSelectedVoice();
+      if (voice) utter.voice = voice;
+      utter.onstart = () => { if (debugEl) debugEl.textContent = 'Test voice: started playing (' + (voice ? voice.name : 'system default') + ') at ' + new Date().toLocaleTimeString(); };
+      utter.onerror = (e) => { if (debugEl) debugEl.textContent = 'Test voice: error — ' + e.error + ' (' + (voice ? voice.name : 'system default') + ') — try a different voice from the dropdown above'; };
       utter.onend = () => { if (debugEl) debugEl.textContent += ' (finished)'; };
       window.speechSynthesis.speak(utter);
       setTimeout(() => {
